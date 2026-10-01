@@ -6,7 +6,14 @@ import {
 overrideGlobalConsole();
 startConsoleRateLimiting();
 
-import { app, shell, BrowserWindow, session, desktopCapturer } from 'electron';
+import {
+	app,
+	shell,
+	BrowserWindow,
+	session,
+	desktopCapturer,
+	webContents,
+} from 'electron';
 import { join } from 'path';
 import { is, optimizer } from '@electron-toolkit/utils';
 import icon from '../../resources/icon.png?asset';
@@ -253,10 +260,14 @@ export default class AltronScreenApp {
 	 */
 	private async setupDisplayMediaHandler(): Promise<void> {
 		session.defaultSession.setDisplayMediaRequestHandler(
-			async (_request, callback) => {
+			async (request, callback) => {
 				try {
+					const contents = request.frame
+						? webContents.fromFrame(request.frame)
+						: null;
 					const pendingSourceId =
-						getAltronScreenGlobal().pendingDisplaySourceId;
+						contents &&
+						getAltronScreenGlobal().pendingDisplaySourceIds.get(contents.id);
 
 					if (pendingSourceId) {
 						const sources = await desktopCapturer.getSources({

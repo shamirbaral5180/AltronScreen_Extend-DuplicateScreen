@@ -13,7 +13,7 @@ export default function handleSocket(peerConnection: PeerConnection): void {
 		peerConnection.selfDestroy();
 	});
 
-	peerConnection.socket.on('connect', () => {
+	peerConnection.socket.on('SIGNALING_READY', () => {
 		peerConnection.emitUserEnter();
 	});
 

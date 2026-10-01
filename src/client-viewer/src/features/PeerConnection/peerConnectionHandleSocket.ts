@@ -50,7 +50,11 @@ export default (peerConnection: PeerConnection) => {
 		}
 	});
 
-	socket.on('connect', () => {
+	socket.on('ROOM_ASSIGNED', (roomId: string) => {
+		peerConnection.roomId = roomId;
+	});
+
+	socket.on('SIGNALING_READY', () => {
 		let ipCallbackReceived = false;
 
 		// clear any existing reconnect timeout
@@ -82,7 +86,7 @@ export default (peerConnection: PeerConnection) => {
 				}
 				getMyIPCallback(peerConnection, ip, window.navigator.userAgent);
 			});
-		}, 500);
+		}, 0);
 	});
 
 	socket.on('NOT_ALLOWED', () => {

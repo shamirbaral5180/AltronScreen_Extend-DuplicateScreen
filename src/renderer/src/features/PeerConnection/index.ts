@@ -250,8 +250,8 @@ export default class PeerConnection {
 	}
 
 	disconnectPartner(): void {
-		this.socket.emit('DISCONNECT_SOCKET_BY_DEVICE_IP', {
-			ip: this.partnerDeviceDetails.deviceIP,
+		this.socket.emit('DISCONNECT_PARTNER', {
+			username: this.partner.username,
 		});
 
 		this.partnerDeviceDetails = {} as Device;
@@ -303,7 +303,7 @@ export default class PeerConnection {
 	}
 
 	toggleLockRoom(isConnected: boolean): void {
-		this.socket.emit('TOGGLE_LOCK_ROOM');
+		this.socket.emit('SET_ROOM_LOCK', { locked: isConnected });
 		this.isSocketRoomLocked = isConnected;
 	}
 }

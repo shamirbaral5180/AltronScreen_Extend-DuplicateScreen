@@ -40,6 +40,16 @@ export default function HomePage(): React.ReactElement {
 		useState<Device | null>(null);
 
 	const hasScreenPermission = useScreenRecordingPermission();
+	const handleSharingComplete = useCallback(async (): Promise<void> => {
+		setActiveStep(0);
+		setPendingConnectionDevice(null);
+		setIsUserAllowedConnection(false);
+		setIsAllowDeviceAlertOpen(false);
+		// Select the next queued viewer without cancelling a newly arrived request.
+		await window.electron.ipcRenderer.invoke(
+			IpcEvents.CreateWaitingForConnectionSharingSession,
+		);
+	}, []);
 
 	const handleResetWithSharingSessionRestart =
 		useCallback(async (): Promise<void> => {
@@ -74,6 +84,7 @@ export default function HomePage(): React.ReactElement {
 					pendingConnectionDevice={pendingConnectionDevice}
 					setPendingConnectionDevice={setPendingConnectionDevice}
 					handleReset={handleResetWithSharingSessionRestart}
+					handleSharingComplete={handleSharingComplete}
 				/>
 				<ScreenRecordingPermissionModal isOpen={!hasScreenPermission} />
 			</div>

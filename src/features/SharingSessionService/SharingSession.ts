@@ -83,7 +83,8 @@ export default class SharingSession {
 	}
 
 	destroy(): void {
-		this.peerConnectionHelperRenderer?.close();
+		const helper = this.peerConnectionHelperRenderer;
+		if (helper && !helper.isDestroyed()) helper.close();
 	}
 
 	setOnDeviceConnectedCallback(callback: (device: Device) => void): void {

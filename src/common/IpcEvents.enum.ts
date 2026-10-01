@@ -11,8 +11,6 @@ export enum IpcEvents {
 	GetConnectedDevices = 'get-connected-devices-list',
 	DisconnectDeviceById = 'disconnect-device-by-id',
 	DisconnectAllDevices = 'disconnect-all-devices',
-	GetViewerConnectionAvailability = 'get-viewer-connection-availability',
-	ViewerConnectionAvailabilityChanged = 'viewer-connection-availability-changed',
 	AppLanguageChanged = 'app-language-changed',
 	GetDesktopCapturerServiceSourcesMap = 'get-desktop-capturer-service-sources-map',
 	GetDesktopCapturerServiceSourcesByIds = 'get-desktop-capturer-service-sources-by-ids',

@@ -4,21 +4,27 @@ import { altronscreenApp } from '../main';
 import { Device } from '../common/Device';
 import SharingSessionStatusEnum from '../features/SharingSessionService/SharingSessionStatusEnum';
 
+export function showNextPendingConnection(): void {
+	const { connectedDevicesService, sharingSessionService } =
+		getAltronScreenGlobal();
+	const device = connectedDevicesService.pendingConnectionDevice;
+	sharingSessionService.waitingForConnectionSharingSession =
+		sharingSessionService.sharingSessions.get(device.sharingSessionID) ?? null;
+	const window = altronscreenApp.mainWindow;
+	if (window && !window.isDestroyed()) {
+		window.webContents.send(IpcEvents.SetPendingConnectionDevice, device.id ? device : null);
+	}
+}
+
 export function onDeviceConnectedCallback(device: Device): void {
 	const altronscreenGlobal = getAltronScreenGlobal();
 	const { connectedDevicesService, sharingSessionService } = altronscreenGlobal;
-	if (!connectedDevicesService.isSlotAvailable()) {
-		const waitingSession =
-			sharingSessionService.waitingForConnectionSharingSession;
-		waitingSession?.denyConnectionForPartner();
-		waitingSession?.setStatus(SharingSessionStatusEnum.NOT_CONNECTED);
-		sharingSessionService.waitingForConnectionSharingSession = null;
-		connectedDevicesService.resetPendingConnectionDevice();
-		return;
-	}
-	connectedDevicesService.setPendingConnectionDevice(device);
-	altronscreenApp.mainWindow?.webContents.send(
-		IpcEvents.SetPendingConnectionDevice,
-		device,
+	const session = sharingSessionService.sharingSessions.get(
+		device.sharingSessionID,
 	);
+	if (!session || session.status === SharingSessionStatusEnum.SHARING) return;
+	const wasEmpty = !connectedDevicesService.pendingConnectionDevice.id;
+	if (!connectedDevicesService.setPendingConnectionDevice(device)) return;
+	session.setDeviceID(device.id);
+	if (wasEmpty) showNextPendingConnection();
 }

@@ -50,7 +50,6 @@ const ScanQRStep: React.FC = () => {
 	const [clientViewerPort, setClientViewerPort] = useState('80'); // Default port, can be changed later
 	const classes = useStyles();
 
-	const [isViewerSlotAvailable, setIsViewerSlotAvailable] = useState(true);
 	const [LOCAL_LAN_IP, setLocalLanIP] = useState('');
 	const [isQRCodeMagnified, setIsQRCodeMagnified] = useState(false);
 
@@ -63,49 +62,6 @@ const ScanQRStep: React.FC = () => {
 			.catch((error) => {
 				console.error('Failed to get port:', error);
 			});
-	}, []);
-
-	useEffect(() => {
-		let cancelled = false;
-
-		const handleAvailabilityChange = (
-			_: unknown,
-			payload: { isAvailable: boolean },
-		): void => {
-			if (cancelled) return;
-			const isAvailable = Boolean(payload?.isAvailable);
-			setIsViewerSlotAvailable(isAvailable);
-			if (!isAvailable) {
-				setIsQRCodeMagnified(false);
-			}
-		};
-
-		window.electron.ipcRenderer
-			.invoke(IpcEvents.GetViewerConnectionAvailability)
-			.then((availability) => {
-				if (cancelled) return;
-				const isAvailable = Boolean(availability);
-				setIsViewerSlotAvailable(isAvailable);
-				if (!isAvailable) {
-					setIsQRCodeMagnified(false);
-				}
-			})
-			.catch((error) => {
-				console.error('Failed to get viewer slot availability:', error);
-			});
-
-		window.electron.ipcRenderer.on(
-			IpcEvents.ViewerConnectionAvailabilityChanged,
-			handleAvailabilityChange,
-		);
-
-		return () => {
-			cancelled = true;
-			window.electron.ipcRenderer.removeListener(
-				IpcEvents.ViewerConnectionAvailabilityChanged,
-				handleAvailabilityChange,
-			);
-		};
 	}, []);
 
 	useEffect(() => {
@@ -134,12 +90,11 @@ const ScanQRStep: React.FC = () => {
 		return `:${clientViewerPort}`;
 	}, [clientViewerPort]);
 	const shareUrl = useMemo(() => {
-		if (!isViewerSlotAvailable) return '';
 		if (LOCAL_LAN_IP === '') return '';
 		return `http://${LOCAL_LAN_IP}${portString}`;
-	}, [LOCAL_LAN_IP, portString, isViewerSlotAvailable]);
+	}, [LOCAL_LAN_IP, portString]);
 	const isQrInteractive = shareUrl !== '';
-	const connectionLimitTooltip = t('connection-limit-reached-tooltip');
+	const connectionLimitTooltip = t('waiting-for-connection');
 	const qrTooltipContent = isQrInteractive
 		? t('click-to-make-bigger')
 		: connectionLimitTooltip;
@@ -244,7 +199,7 @@ const ScanQRStep: React.FC = () => {
 						? t(
 								'enter-the-following-address-in-browser-address-bar-on-any-device',
 							)
-						: t('one-viewing-client-is-connected-already')}
+						: t('waiting-for-connection')}
 				</Text>
 			</Row>
 
@@ -270,31 +225,11 @@ const ScanQRStep: React.FC = () => {
 								);
 							}}
 						>
-							{isQrInteractive ? shareUrl : t('viewing-client-connected-label')}
+							{isQrInteractive ? shareUrl : t('waiting-for-connection')}
 						</Button>
 					</span>
 				</Tooltip>
 			</Row>
-			{!isQrInteractive && (
-				<>
-					<Row
-						style={{
-							marginTop: '12px',
-							marginBottom: '6px',
-							display: 'flex',
-							flexDirection: 'row',
-							alignItems: 'center',
-							justifyContent: 'center',
-							textAlign: 'center',
-						}}
-					>
-						<Text className="bp3-text-muted">
-							{t('altronscreen-allows-only-one-client-at-same-time')}
-						</Text>
-					</Row>
-				</>
-			)}
-
 			<Dialog
 				className={classes.bigQRCodeDialogRoot}
 				isOpen={isQrInteractive && isQRCodeMagnified}

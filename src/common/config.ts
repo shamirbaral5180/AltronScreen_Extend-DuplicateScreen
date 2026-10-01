@@ -17,10 +17,9 @@ if (!hostname && !protocol && !primaryPort && !backupPort) {
 export const VIRTUAL_DISPLAY_DRIVER_URL =
 	'https://github.com/VirtualDrivers/Virtual-Display-Driver/releases/latest';
 
-// A single, fixed room id used for all sharing sessions. The random room id
-// was removed so the share URL stays clean (no `/<random>` suffix); the app is
-// LAN-only and still requires the host to explicitly allow each connection.
+// Public entry point; each browser is assigned a private signaling room.
 export const DEFAULT_ROOM_ID = 'share';
+export const MAX_VIEWER_SESSIONS = 16;
 
 export default {
 	hostname,

@@ -5,6 +5,7 @@ import RendererWebrtcHelpersService from '../PeerConnectionHelperRendererService
 import SharingSession from './SharingSession';
 import SharingSessionStatusEnum from './SharingSessionStatusEnum';
 import { LocalPeerUser } from '../../common/LocalPeerUser';
+import { MAX_VIEWER_SESSIONS } from '../../common/config';
 
 export default class SharingSessionService {
 	user: LocalPeerUser | null;
@@ -13,7 +14,6 @@ export default class SharingSessionService {
 	roomIDService: RoomIDService;
 	connectedDevicesService: ConnectedDevicesService;
 	rendererWebrtcHelpersService: RendererWebrtcHelpersService;
-	isCreatingNewSharingSession: boolean;
 
 	constructor(
 		_roomIDService: RoomIDService,
@@ -26,7 +26,6 @@ export default class SharingSessionService {
 		this.waitingForConnectionSharingSession = null;
 		this.sharingSessions = new Map<string, SharingSession>();
 		this.user = null;
-		this.isCreatingNewSharingSession = false;
 		this.createUser();
 
 		setInterval(
@@ -51,64 +50,11 @@ export default class SharingSessionService {
 		});
 	}
 
-	// TODO: invoike this when got user ID from browser
-	createWaitingForConnectionSharingSession(
-		roomID?: string,
-	): Promise<SharingSession> {
-		if (this.isCreatingNewSharingSession) {
-			return new Promise<SharingSession>((resolve, reject) => {
-				const intervalId = setInterval(() => {
-					if (!this.isCreatingNewSharingSession) {
-						clearInterval(intervalId);
-						if (this.waitingForConnectionSharingSession) {
-							resolve(this.waitingForConnectionSharingSession);
-						} else {
-							reject(
-								new Error(
-									'waiting sharing session is not available after creation.',
-								),
-							);
-						}
-					}
-				}, 50);
-			});
-		}
-
-		if (!this.connectedDevicesService.isSlotAvailable()) {
-			return Promise.reject(
-				new Error(
-					'unable to create waiting session while a device is connected',
-				),
-			);
-		}
-
-		this.isCreatingNewSharingSession = true;
-
-		return new Promise<SharingSession>((resolve, reject) => {
-			return this.waitWhileUserIsNotCreated()
-				.then(async () => {
-					if (this.waitingForConnectionSharingSession !== null) {
-						this.isCreatingNewSharingSession = false;
-						resolve(this.waitingForConnectionSharingSession);
-						return this.waitingForConnectionSharingSession;
-					}
-
-					const newSession = await this.createNewSharingSession(roomID || '');
-					this.waitingForConnectionSharingSession = newSession;
-					this.isCreatingNewSharingSession = false;
-					resolve(newSession);
-					return newSession;
-				})
-				.catch((error) => {
-					this.isCreatingNewSharingSession = false;
-					reject(error);
-				});
-		});
-	}
-
 	async createNewSharingSession(_roomID: string): Promise<SharingSession> {
-		const roomID =
-			_roomID || (await this.roomIDService.getSimpleAvailableRoomID());
+		await this.waitWhileUserIsNotCreated();
+		if (this.sharingSessions.size >= MAX_VIEWER_SESSIONS)
+			throw new Error('Maximum simultaneous viewer sessions reached');
+		const roomID = _roomID || uuid.v4();
 		this.roomIDService.markRoomIDAsTaken(roomID);
 		const sharingSession = new SharingSession(
 			roomID,

@@ -31,9 +31,12 @@ interface SocketOPTS {
 	roomIdOriginal: string;
 }
 
-function isLocalhostSocket(socket: Io.Socket) {
+export function isHostSocket(socket: Io.Socket) {
 	const remoteAddress = socket.request.socket.remoteAddress ?? '';
-	return remoteAddress.includes(LOCALHOST_SOCKET_IP);
+	return (
+		socket.handshake.query.role === 'host' &&
+		remoteAddress.includes(LOCALHOST_SOCKET_IP)
+	);
 }
 
 export default class Socket implements SocketOPTS {
@@ -103,7 +106,7 @@ export default class Socket implements SocketOPTS {
 		});
 
 		this.socket.on('GET_IP_BY_SOCKET_ID', (socketID, acknowledgeFunction) => {
-			if (!isLocalhostSocket(this.socket)) {
+			if (!isHostSocket(this.socket)) {
 				return;
 			}
 			acknowledgeFunction(socketsIPService.getSocketIPByID(socketID));
@@ -123,13 +126,15 @@ export default class Socket implements SocketOPTS {
 			this.socket.to(this.roomId).emit('MESSAGE', payload);
 		});
 
-		this.socket.on('DISCONNECT_SOCKET_BY_DEVICE_IP', async (payload) => {
+		this.socket.on('DISCONNECT_PARTNER', async (payload) => {
 			const room: Room = (await this.fetchRoom()) as Room;
 			const ownerUser = (room.users || []).find(
 				(u) => u.socketId === this.socket.id && u.isOwner,
 			);
 			if (!ownerUser) return;
-			const socketIDToDisconnect = socketsIPService.getSocketIDByIP(payload.ip);
+			const socketIDToDisconnect = (room.users || []).find(
+				(user) => !user.isOwner && user.username === payload.username,
+			)?.socketId;
 			if (!socketIDToDisconnect) return;
 
 			const target = socketIOServerStore
@@ -154,7 +159,7 @@ export default class Socket implements SocketOPTS {
 				if (userFound) return;
 			}
 
-			const isOwnerSocket = isLocalhostSocket(this.socket);
+			const isOwnerSocket = isHostSocket(this.socket);
 			if (!isOwnerSocket) {
 				const connectedViewers = (room.users || []).filter((user) => {
 					return !user.isOwner;
@@ -191,7 +196,7 @@ export default class Socket implements SocketOPTS {
 				});
 		});
 
-		this.socket.on('TOGGLE_LOCK_ROOM', async () => {
+		this.socket.on('SET_ROOM_LOCK', async (payload: { locked: boolean }) => {
 			// TODO: in here if there is somehow already more than ONE client connected, then we were spoofed! Need to add code to interrupt connection immediately.
 			const room: Room = (await this.fetchRoom()) as Room;
 			const user = (room.users || []).find(
@@ -204,7 +209,7 @@ export default class Socket implements SocketOPTS {
 
 			await this.saveRoom({
 				...room,
-				isLocked: !room.isLocked,
+				isLocked: Boolean(payload.locked),
 			});
 		});
 
@@ -215,6 +220,7 @@ export default class Socket implements SocketOPTS {
 		this.socket.on('USER_DISCONNECT', () => {
 			this.handleDisconnect(this.socket);
 		});
+		this.socket.emit('SIGNALING_READY');
 	}
 
 	handleDisconnect(socket: Io.Socket): Promise<void> {

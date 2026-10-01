@@ -9,12 +9,20 @@
 ## Extended Screen (true second monitor)
 
 On Windows, AltronScreen can create a **real extended display** — not just a
-mirror — using the free, open-source Virtual Display Driver. Install the driver
-once (AltronScreen guides you and provides an installer helper) and an
-**Extend Screen** option appears. The virtual monitor is sized to the
-connecting device and streamed over the same local connection.
+mirror - using the free, open-source Virtual Display Driver. AltronScreen can
+install the driver with administrator approval. Use **Add another screen (+)**
+in the screen-selection dialog, then select that virtual monitor to share it.
 
 See [`resources/driver/README.md`](resources/driver/README.md) for details.
+
+## Multiple Viewing Devices
+
+Open the same LAN address on your laptop, phone, or other browsers. Approve
+each device in AltronScreen, select its screen or application window, and confirm.
+The laptop continues sharing while the phone connects. Devices can view the
+same source or different sources; disconnecting one does not stop the others.
+Concurrent approval requests are queued. Up to 16 active or pending viewer
+sessions are supported; practical performance depends on the host and network.
 
 AltronScreen is an `electron.js` based application that uses `WebRTC` to make a live stream of your computer screen to a web browser on any device. It is available for MacOS, Windows and Linux operating systems.
 

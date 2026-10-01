@@ -1,3 +1,12 @@
+# 1.1.0
+
+- Connect multiple viewing devices simultaneously using the same LAN URL.
+- Isolate signaling, capture selection, and disconnection for each viewer.
+- Queue host approvals when multiple devices request access at once.
+- Keep the QR code available while other viewers are sharing.
+- Support up to 16 active or pending viewer sessions.
+- Preserve the Windows administrator-mode capture and stable viewer playback fixes.
+
 # 1.0.0
 
 Initial AltronScreen release.

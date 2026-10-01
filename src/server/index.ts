@@ -13,12 +13,16 @@ import Router from 'koa-router';
 import koaStatic from 'koa-static';
 import koaSend from 'koa-send';
 import { detect as detectPort } from 'detect-port';
-import config from '../common/config';
+import config, { DEFAULT_ROOM_ID, MAX_VIEWER_SESSIONS } from '../common/config';
 import startPollForInactiveRooms from './startPollForInactiveRooms';
 import Logger from '../main/utils/LoggerWithFilePrefix';
 import SocketsIPService from './socketsIPService';
 import socketIOServerStore from './store/socketIOServerStore';
-import DarkwireSocket, { disconnectRoom } from './darkwireSocket';
+import DarkwireSocket, { disconnectRoom, isHostSocket } from './darkwireSocket';
+import {
+	onDeviceConnectedCallback,
+	showNextPendingConnection,
+} from './onDeviceConnectedCallback';
 import getStore from './store';
 import { getAltronScreenGlobal } from '../main/helpers/getAltronScreenGlobal';
 import getMyLocalIpV4 from '../main/helpers/getMyLocalIpV4';
@@ -31,29 +35,73 @@ const getRoomIdHash = (id: string): string => {
 };
 
 const ioHandleOnConnection = (socket): void => {
-	const { roomId } = socket.handshake.query;
+	let { roomId } = socket.handshake.query;
 	const store = getStore();
 
 	setTimeout(async () => {
-		if (!getAltronScreenGlobal().roomIDService.isRoomIDTaken(roomId)) {
+		try {
+			const global = getAltronScreenGlobal();
+			if (roomId === DEFAULT_ROOM_ID && !isHostSocket(socket)) {
+				if (
+					global.sharingSessionService.sharingSessions.size >=
+					MAX_VIEWER_SESSIONS
+				) {
+					socket.emit('NOT_ALLOWED');
+					socket.disconnect(true);
+					return;
+				}
+				const session =
+					await global.sharingSessionService.createNewSharingSession(
+						crypto.randomUUID(),
+					);
+				session.setOnDeviceConnectedCallback(onDeviceConnectedCallback);
+				roomId = session.roomID;
+				const cleanup = () => {
+					if (!global.sharingSessionService.sharingSessions.has(session.id))
+						return;
+					const wasPending =
+						global.sharingSessionService.waitingForConnectionSharingSession
+							?.id === session.id;
+					global.sharingSessionService.sharingSessions.delete(session.id);
+					global.connectedDevicesService.removePendingDevice(session.id);
+					void global.connectedDevicesService.disconnectDeviceByID(
+						session.deviceID,
+					);
+					global.roomIDService.unmarkRoomIDAsTaken(session.roomID);
+					session.destroy();
+					if (wasPending) showNextPendingConnection();
+				};
+				socket.once('disconnect', cleanup);
+				if (!socket.connected) {
+					cleanup();
+					return;
+				}
+				socket.emit('ROOM_ASSIGNED', roomId);
+			}
+			if (!getAltronScreenGlobal().roomIDService.isRoomIDTaken(roomId)) {
+				socket.emit('NOT_ALLOWED');
+				setTimeout(() => {
+					socket.disconnect(true);
+				}, 1000);
+				return;
+			}
+			const roomIdHash = getRoomIdHash(roomId);
+
+			const storedRoom = await store.get('rooms', roomIdHash);
+			const parsedRoom =
+				typeof storedRoom === 'string' ? JSON.parse(storedRoom) : {};
+
+			new DarkwireSocket({
+				roomIdOriginal: roomId,
+				roomId: roomIdHash,
+				socket,
+				room: parsedRoom as Room,
+			});
+		} catch (error) {
+			console.error('Failed to create viewer signaling session:', error);
 			socket.emit('NOT_ALLOWED');
-			setTimeout(() => {
-				socket.disconnect(true);
-			}, 1000);
-			return;
+			socket.disconnect(true);
 		}
-		const roomIdHash = getRoomIdHash(roomId);
-
-		const storedRoom = await store.get('rooms', roomIdHash);
-		const parsedRoom =
-			typeof storedRoom === 'string' ? JSON.parse(storedRoom) : {};
-
-		new DarkwireSocket({
-			roomIdOriginal: roomId,
-			roomId: roomIdHash,
-			socket,
-			room: parsedRoom as Room,
-		});
 		// }
 	}, 500); // timeout 500 millisecond for throttling malicious connections
 };

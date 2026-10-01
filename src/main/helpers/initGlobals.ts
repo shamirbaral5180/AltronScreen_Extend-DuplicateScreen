@@ -15,14 +15,15 @@ export interface AltronScreenGlobal {
 	sharingSessionService: SharingSessionService;
 	desktopCapturerSourcesService: DesktopCapturerSourcesService;
 	virtualDisplayService: VirtualDisplayService;
-	pendingDisplaySourceId: string;
+	pendingDisplaySourceIds: Map<number, string>;
 	latestAppVersion: string;
 	currentAppVersion: string;
 	cliLocalIp?: string;
 }
 
 export const initGlobals = (appPath: string, cliLocalIp?: string) => {
-	const altronscreenGlobal: AltronScreenGlobal = global as unknown as AltronScreenGlobal;
+	const altronscreenGlobal: AltronScreenGlobal =
+		global as unknown as AltronScreenGlobal;
 
 	altronscreenGlobal.appPath = appPath;
 	altronscreenGlobal.rendererWebrtcHelpersService =
@@ -34,9 +35,10 @@ export const initGlobals = (appPath: string, cliLocalIp?: string) => {
 		altronscreenGlobal.connectedDevicesService,
 		altronscreenGlobal.rendererWebrtcHelpersService,
 	);
-	altronscreenGlobal.desktopCapturerSourcesService = new DesktopCapturerSources();
+	altronscreenGlobal.desktopCapturerSourcesService =
+		new DesktopCapturerSources();
 	altronscreenGlobal.virtualDisplayService = new VirtualDisplayService();
-	altronscreenGlobal.pendingDisplaySourceId = '';
+	altronscreenGlobal.pendingDisplaySourceIds = new Map();
 	altronscreenGlobal.latestAppVersion = '';
 	altronscreenGlobal.currentAppVersion = app.getVersion();
 	altronscreenGlobal.cliLocalIp = cliLocalIp;

@@ -12,7 +12,7 @@ import { ConnectedDevicesService } from '../../features/ConnectedDevicesService'
 import SharingSession from '../../features/SharingSessionService/SharingSession';
 import RoomIDService from '../../server/RoomIDService';
 import { signalingServer } from '../../server';
-import { onDeviceConnectedCallback } from '../../server/onDeviceConnectedCallback';
+import { showNextPendingConnection } from '../../server/onDeviceConnectedCallback';
 import SharingSessionStatusEnum from '../../features/SharingSessionService/SharingSessionStatusEnum';
 import getMyLocalIpV4 from './getMyLocalIpV4';
 import isWifiConnected from './isWifiConnected';
@@ -156,40 +156,19 @@ export const initIpcMainHandlers = (mainWindow: BrowserWindow): void => {
 		altronscreenGlobal.roomIDService.unmarkRoomIDAsTaken(roomID);
 	});
 
-	async function createWaitingForConnectionSharingSession(
-		roomID?: string,
-	): Promise<void> {
-		try {
-			const altronscreenGlobal = getAltronScreenGlobal();
-			if (!altronscreenGlobal.connectedDevicesService.isSlotAvailable()) return;
-			if (
-				altronscreenGlobal.sharingSessionService
-					.waitingForConnectionSharingSession !== null
-			) {
-				return;
-			}
-			const waitingSession =
-				await altronscreenGlobal.sharingSessionService.createWaitingForConnectionSharingSession(
-					roomID,
-				);
-			waitingSession.setOnDeviceConnectedCallback(onDeviceConnectedCallback);
-		} catch (error) {
-			console.error('Failed to create waiting sharing session', error);
-		}
-	}
-
 	ipcMain.handle(
 		IpcEvents.CreateWaitingForConnectionSharingSession,
-		async (_, roomID?: string) => {
-			await createWaitingForConnectionSharingSession(roomID);
-		},
+		showNextPendingConnection,
 	);
 
-	async function resetWaitingForConnectionSharingSession(): Promise<void> {
-		getAltronScreenGlobal().connectedDevicesService.resetPendingConnectionDevice();
-		const sharingSession =
-			getAltronScreenGlobal().sharingSessionService
-				.waitingForConnectionSharingSession;
+	async function resetWaitingForConnectionSharingSession(
+		sharingSession = getAltronScreenGlobal().sharingSessionService
+			.waitingForConnectionSharingSession,
+	): Promise<void> {
+		if (!sharingSession) return;
+		getAltronScreenGlobal().connectedDevicesService.removePendingDevice(
+			sharingSession.id,
+		);
 		const roomID = sharingSession?.roomID;
 		sharingSession?.denyConnectionForPartner();
 		sharingSession?.disconnectByHostMachineUser();
@@ -201,38 +180,19 @@ export const initIpcMainHandlers = (mainWindow: BrowserWindow): void => {
 		if (roomID) {
 			getAltronScreenGlobal().roomIDService.unmarkRoomIDAsTaken(roomID);
 		}
-		getAltronScreenGlobal().sharingSessionService.waitingForConnectionSharingSession =
-			null;
+		if (
+			getAltronScreenGlobal().sharingSessionService
+				.waitingForConnectionSharingSession === sharingSession
+		) {
+			getAltronScreenGlobal().sharingSessionService.waitingForConnectionSharingSession =
+				null;
+		}
 		if (roomID) await signalingServer.closeRoom(roomID);
 	}
 
-	ipcMain.handle(
-		IpcEvents.ResetWaitingForConnectionSharingSession,
-		resetWaitingForConnectionSharingSession,
+	ipcMain.handle(IpcEvents.ResetWaitingForConnectionSharingSession, () =>
+		resetWaitingForConnectionSharingSession(),
 	);
-
-	const removeViewerAvailabilityListener =
-		getAltronScreenGlobal().connectedDevicesService.addAvailabilityListener(
-			(state) => {
-				const isAvailable = state === 'available';
-				const targetWindow = mainWindow?.isDestroyed() ? null : mainWindow;
-				if (targetWindow) {
-					targetWindow.webContents.send(
-						IpcEvents.ViewerConnectionAvailabilityChanged,
-						{
-							isAvailable,
-						},
-					);
-				}
-				if (isAvailable) {
-					void createWaitingForConnectionSharingSession();
-				}
-			},
-		);
-
-	mainWindow.on('closed', () => {
-		removeViewerAvailabilityListener();
-	});
 
 	ipcMain.handle(IpcEvents.SetDeviceConnectedStatus, () => {
 		if (
@@ -286,10 +246,6 @@ export const initIpcMainHandlers = (mainWindow: BrowserWindow): void => {
 
 	ipcMain.handle(IpcEvents.GetConnectedDevices, () => {
 		return getAltronScreenGlobal().connectedDevicesService.getDevices();
-	});
-
-	ipcMain.handle(IpcEvents.GetViewerConnectionAvailability, () => {
-		return getAltronScreenGlobal().connectedDevicesService.isSlotAvailable();
 	});
 
 	ipcMain.handle(IpcEvents.DisconnectDeviceById, (_, id) => {
@@ -372,10 +328,6 @@ export const initIpcMainHandlers = (mainWindow: BrowserWindow): void => {
 		const altronscreenGlobal = getAltronScreenGlobal();
 		const { connectedDevicesService, sharingSessionService, roomIDService } =
 			altronscreenGlobal;
-		if (!connectedDevicesService.isSlotAvailable()) {
-			return { ok: false, message: 'A viewer is already connected.' };
-		}
-
 		const pendingDevice = connectedDevicesService.pendingConnectionDevice;
 		if (!pendingDevice.id) {
 			return {
@@ -394,13 +346,13 @@ export const initIpcMainHandlers = (mainWindow: BrowserWindow): void => {
 		}
 
 		try {
-			// Occupy the viewer slot only after media negotiation succeeds.
+			// Keep each device independent and only list it after media connects.
 			await sharingSession.callPeer();
 			connectedDevicesService.addDevice(pendingDevice);
 		} catch (error) {
 			console.error('Failed to establish screen-sharing connection:', error);
-			await resetWaitingForConnectionSharingSession();
-			void createWaitingForConnectionSharingSession();
+			await resetWaitingForConnectionSharingSession(sharingSession);
+			showNextPendingConnection();
 			return {
 				ok: false,
 				message: error instanceof Error ? error.message : String(error),
@@ -411,7 +363,7 @@ export const initIpcMainHandlers = (mainWindow: BrowserWindow): void => {
 		sharingSession.setStatus(SharingSessionStatusEnum.SHARING);
 		sharingSessionService.waitingForConnectionSharingSession = null;
 
-		connectedDevicesService.resetPendingConnectionDevice();
+		connectedDevicesService.removePendingDevice(sharingSession.id);
 		return { ok: true };
 	}
 
@@ -529,9 +481,12 @@ export const initIpcMainHandlers = (mainWindow: BrowserWindow): void => {
 		return { ok: true };
 	});
 
-	ipcMain.handle(IpcEvents.SetPendingDisplaySourceId, (_, sourceId) => {
-		getAltronScreenGlobal().pendingDisplaySourceId =
-			typeof sourceId === 'string' ? sourceId : '';
+	ipcMain.handle(IpcEvents.SetPendingDisplaySourceId, (event, sourceId) => {
+		const sources = getAltronScreenGlobal().pendingDisplaySourceIds;
+		const id = event.sender.id;
+		if (!sources.has(id))
+			event.sender.once('destroyed', () => sources.delete(id));
+		sources.set(id, typeof sourceId === 'string' ? sourceId : '');
 	});
 
 	ipcMain.handle(IpcEvents.GetVirtualDisplayCount, async () => {
@@ -723,6 +678,11 @@ export const initIpcMainHandlers = (mainWindow: BrowserWindow): void => {
 	});
 
 	ipcMain.handle(IpcEvents.DestroySharingSessionById, (_, id) => {
+		const global = getAltronScreenGlobal();
+		const wasPending =
+			global.sharingSessionService.waitingForConnectionSharingSession?.id ===
+			id;
+		global.connectedDevicesService.removePendingDevice(id);
 		if (
 			getAltronScreenGlobal().sharingSessionService
 				.waitingForConnectionSharingSession?.id === id
@@ -732,9 +692,14 @@ export const initIpcMainHandlers = (mainWindow: BrowserWindow): void => {
 		}
 		const sharingSession =
 			getAltronScreenGlobal().sharingSessionService.sharingSessions.get(id);
+		if (sharingSession)
+			void global.connectedDevicesService.disconnectDeviceByID(
+				sharingSession.deviceID,
+			);
 		sharingSession?.setStatus(SharingSessionStatusEnum.DESTROYED);
 		sharingSession?.destroy();
 		getAltronScreenGlobal().sharingSessionService.sharingSessions.delete(id);
+		if (wasPending) showNextPendingConnection();
 	});
 
 	ipcMain.handle(IpcEvents.OpenExternalLink, (_, url: string) => {
@@ -756,8 +721,6 @@ export const initIpcMainHandlers = (mainWindow: BrowserWindow): void => {
 		app.relaunch();
 		app.exit(0);
 	});
-
-	void createWaitingForConnectionSharingSession();
 };
 
 /**

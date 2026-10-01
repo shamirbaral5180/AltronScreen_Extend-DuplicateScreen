@@ -235,7 +235,7 @@ export default function ConnectedDevicesListDrawer(
 											</Row>
 											<Row center="xs">
 												<Button
-													id={`disconnect-device-${device.deviceIP}`}
+											id={`disconnect-device-${device.id}`}
 													intent="danger"
 													onClick={(): void => {
 														handleDisconnectAndHideOneDevice(device.id);

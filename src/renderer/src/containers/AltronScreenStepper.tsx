@@ -63,6 +63,7 @@ interface Props {
 	pendingConnectionDevice: Device | null;
 	setPendingConnectionDevice: (device: Device | null) => void;
 	handleReset: () => void;
+	handleSharingComplete: () => void;
 }
 
 const AltronScreenStepper = ({
@@ -75,6 +76,7 @@ const AltronScreenStepper = ({
 	pendingConnectionDevice,
 	setPendingConnectionDevice,
 	handleReset,
+	handleSharingComplete,
 }: Props): ReactNode => {
 	const classes = useStyles();
 	const { t } = useTranslation();
@@ -184,12 +186,12 @@ const AltronScreenStepper = ({
 
 		const handlePendingConnectionDevice = (
 			_: unknown,
-			device: Device,
+			device: Device | null,
 		): void => {
 			setActiveStep(0);
 			setIsUserAllowedConnection(false);
 			setPendingConnectionDevice(device);
-			setIsAllowDeviceAlertOpen(true);
+			setIsAllowDeviceAlertOpen(Boolean(device));
 		};
 
 		window.electron.ipcRenderer.on(
@@ -233,7 +235,7 @@ const AltronScreenStepper = ({
 					resetPendingConnectionDevice={() => setPendingConnectionDevice(null)}
 					resetUserAllowedConnection={() => setIsUserAllowedConnection(false)}
 					connectedDevice={pendingConnectionDevice}
-					handleReset={handleReset}
+					handleReset={handleSharingComplete}
 				/>
 			</div>
 		);
@@ -241,6 +243,7 @@ const AltronScreenStepper = ({
 		activeStep,
 		steps,
 		handleReset,
+		handleSharingComplete,
 		handleBack,
 		handleNextEntireScreen,
 		handleNextApplicationWindow,
