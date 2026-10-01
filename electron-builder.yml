@@ -1,0 +1,48 @@
+appId: com.altronscreen.app
+productName: AltronScreen
+directories:
+  buildResources: build
+files:
+  - '!tmp-wrtc-test/**'
+  - '!**/.vscode/*'
+  - '!src/*'
+  - '!electron.vite.config.{js,ts,mjs,cjs}'
+  - '!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md,AGENTS.md}'
+  - '!{.env,.env.*,.npmrc,package-lock.json}'
+  - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
+extraResources:
+  - from: out/client-viewer
+    to: client-viewer
+  - from: resources/driver
+    to: driver
+asarUnpack:
+  - resources/**
+win:
+  artifactName: ${name}-${version}-${arch}.${ext}
+  executableName: AltronScreen
+  requestedExecutionLevel: requireAdministrator
+  target:
+    - portable
+nsis: null
+mac:
+  artifactName: ${name}-${version}-${arch}.${ext}
+  hardenedRuntime: true
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  extendInfo: []
+  notarize: false
+dmg:
+  artifactName: ${name}-${version}-${arch}.${ext}
+linux:
+  target:
+    - AppImage
+    - rpm
+    - deb
+    # - snap
+  maintainer: electronjs.org
+  category: Utility
+appImage:
+  artifactName: ${name}-${version}-${arch}.${ext}
+npmRebuild: false
+electronDownload:
+  mirror: https://npmmirror.com/mirrors/electron/

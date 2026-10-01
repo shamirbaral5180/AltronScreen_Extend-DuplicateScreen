@@ -1,0 +1,30 @@
+/*
+ * original JS code from darkwire.io
+ * translated to typescript for AltronScreen app
+ * */
+import getStore from './store';
+
+export default async function startPollForInactiveRooms(): Promise<void> {
+	const store = getStore();
+	const rooms = (await store.getAll('rooms')) || {};
+
+	for (const roomId of Object.keys(rooms)) {
+		const serializedRoom = rooms[roomId];
+		if (typeof serializedRoom !== 'string') {
+			continue;
+		}
+		const room = JSON.parse(serializedRoom) as { updatedAt?: number };
+		if (typeof room.updatedAt !== 'number') {
+			continue;
+		}
+		const timeSinceUpdatedInSeconds = (Date.now() - room.updatedAt) / 1000;
+		const timeSinceUpdatedInDays = Math.round(
+			timeSinceUpdatedInSeconds / 60 / 60 / 24,
+		);
+		if (timeSinceUpdatedInDays > 7) {
+			await store.del('rooms', roomId);
+		}
+	}
+
+	setTimeout(startPollForInactiveRooms, 1000 * 60 * 60); // every hour
+}

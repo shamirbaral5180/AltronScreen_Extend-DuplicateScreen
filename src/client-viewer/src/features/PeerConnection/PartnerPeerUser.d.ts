@@ -1,0 +1,3 @@
+interface PartnerPeerUser {
+	username: string;
+}
