@@ -20,6 +20,30 @@ export default function PreviewGridList(props: PreviewGridListProps) {
 		handleNextApplicationWindow,
 	} = props;
 
+	if (viewSharingIds.length === 0) {
+		return (
+			<div
+				className="share-preview-empty"
+				data-testid="share-preview-empty"
+				style={{
+					display: 'flex',
+					flexDirection: 'column',
+					alignItems: 'center',
+					justifyContent: 'center',
+					gap: '12px',
+					padding: '40px',
+					textAlign: 'center',
+				}}
+			>
+				<Text className="bp3-text-muted">
+					{isEntireScreen
+						? 'No screens detected. Click Refresh to try again.'
+						: 'No application windows detected. Open the app you want to share, then click Refresh.'}
+				</Text>
+			</div>
+		);
+	}
+
 	return (
 		<div className="share-preview-grid" data-testid="share-preview-grid">
 			{viewSharingIds.map((id) => {

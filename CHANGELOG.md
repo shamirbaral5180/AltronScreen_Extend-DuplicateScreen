@@ -1,3 +1,14 @@
+# 1.4.3
+
+- Fixed the "Application Window" list sometimes being empty and unselectable:
+  source enumeration now retries, falls back to listing windows without icons
+  when icon extraction fails on a protected/UWP window, and keeps the last good
+  window list instead of blanking it when Windows returns an empty result.
+- The preview card lookup is retried after a refresh so cards no longer remain
+  blank when the background source refresh races the dialog.
+- Added a clear empty-state message in the share dialog when no windows or
+  screens are found, prompting the user to open an app and press Refresh.
+
 # 1.4.2
 
 - Fixed the "Application Window" list: shareable windows now display as a

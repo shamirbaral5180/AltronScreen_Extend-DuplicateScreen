@@ -185,6 +185,8 @@
 	"add-another-screen": "Add another screen",
 	"remove-a-screen": "Remove a screen",
 	"no-virtual-screen-to-remove": "No extra screen available to remove.",
+	"No screens detected. Click Refresh to try again.": "No screens detected. Click Refresh to try again.",
+	"No application windows detected. Open the app you want to share, then click Refresh.": "No application windows detected. Open the app you want to share, then click Refresh.",
 	"Streaming settings": "Streaming settings",
 	"Saved defaults apply to new connections. Save to update active viewers without disconnecting them.": "Saved defaults apply to new connections. Save to update active viewers without disconnecting them.",
 	"Preset": "Preset",

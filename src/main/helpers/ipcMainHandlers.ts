@@ -329,25 +329,36 @@ export const initIpcMainHandlers = (mainWindow: BrowserWindow): void => {
 
 	ipcMain.handle(
 		IpcEvents.GetDesktopCapturerServiceSourcesByIds,
-		(_, ids: string[]) => {
-			const map =
-				getAltronScreenGlobal().desktopCapturerSourcesService.getSourcesMap();
-			const res = {};
+		async (_, ids: string[]) => {
+			const service = getAltronScreenGlobal().desktopCapturerSourcesService;
 
-			ids.forEach((id) => {
-				const source = map.get(id);
-				if (!source) return;
-				// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-				// @ts-ignore
-				res[id] = {
-					source: {
-						thumbnail: source?.source.thumbnail?.toDataURL(),
-						appIcon: source?.source.appIcon?.toDataURL(),
-						name: source?.source.name,
-					},
-				};
-			});
-			return res;
+			const collect = (): Record<string, unknown> => {
+				const map = service.getSourcesMap();
+				const res: Record<string, unknown> = {};
+				ids.forEach((id) => {
+					const source = map.get(id);
+					if (!source) return;
+					res[id] = {
+						source: {
+							thumbnail: source.source.thumbnail?.toDataURL(),
+							appIcon: source.source.appIcon?.toDataURL(),
+							name: source.source.name,
+						},
+					};
+				});
+				return res;
+			};
+
+			let result = collect();
+			// The 5s auto-refresh can replace the source map between the overlay
+			// fetching ids and each card fetching details, so an id may be
+			// missing. Refresh once and retry before giving up, otherwise the
+			// preview card would stay blank with nothing to click.
+			if (ids.some((id) => !(id in result))) {
+				await service.refreshDesktopCapturerSources();
+				result = collect();
+			}
+			return result;
 		},
 	);
 
