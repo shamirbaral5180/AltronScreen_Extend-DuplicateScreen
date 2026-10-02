@@ -37,6 +37,9 @@ connections, and saving updates active viewers live. These are capture and
 bitrate limits rather than guaranteed speeds; actual latency depends on the
 network and hardware.
 
+When sharing an application window, all capturable windows are listed as a
+uniform grid of preview tiles (the hidden WebRTC helper window is excluded).
+
 Settings also include the extended screen's default resolution (1360x768 by
 default). The virtual display advertises several standard resolutions, so its
 resolution can also be changed live from Windows Display Settings while it is

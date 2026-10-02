@@ -1,3 +1,12 @@
+# 1.4.2
+
+- Fixed the "Application Window" list: shareable windows now display as a
+  uniform grid of tiles, with the window thumbnail filling a fixed area and the
+  name bar spanning the full card width, and all rows are reachable (no clipped
+  last row).
+- AltronScreen's own hidden WebRTC helper window is no longer listed as a
+  shareable application.
+
 # 1.4.1
 
 - Fixed "Add another screen" adding several screens at once: the count is now

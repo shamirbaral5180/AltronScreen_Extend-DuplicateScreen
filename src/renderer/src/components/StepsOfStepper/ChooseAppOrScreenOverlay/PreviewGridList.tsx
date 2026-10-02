@@ -1,4 +1,3 @@
-import { Row, Col } from 'react-flexbox-grid';
 import SharingSourcePreviewCard from '../../SharingSourcePreviewCard';
 import { IpcEvents } from '../../../../../common/IpcEvents.enum';
 import { useState } from 'react';
@@ -22,57 +21,50 @@ export default function PreviewGridList(props: PreviewGridListProps) {
 	} = props;
 
 	return (
-		<Row
-			center="xs"
-			around="xs"
-			style={{
-				height: '90%',
-			}}
-		>
+		<div className="share-preview-grid" data-testid="share-preview-grid">
 			{viewSharingIds.map((id) => {
 				return (
-					<Col xs={12} md={6} key={id}>
-						<SharingSourcePreviewCard
-							sharingSourceID={id}
-							isChangeAppearanceOnHover
-							onClickCard={async () => {
-								if (isPreparing) return;
-								setIsPreparing(true);
-								setSourceError('');
-								try {
-									await window.electron.ipcRenderer.invoke(
-										IpcEvents.SetDesktopCapturerSourceId,
-										id,
-									);
-									if (isEntireScreen) {
-										handleNextEntireScreen();
-									} else {
-										handleNextApplicationWindow();
-									}
-								} catch (error) {
-									setSourceError(
-										error instanceof Error ? error.message : String(error),
-									);
-								} finally {
-									setIsPreparing(false);
+					<SharingSourcePreviewCard
+						key={id}
+						sharingSourceID={id}
+						isChangeAppearanceOnHover
+						onClickCard={async () => {
+							if (isPreparing) return;
+							setIsPreparing(true);
+							setSourceError('');
+							try {
+								await window.electron.ipcRenderer.invoke(
+									IpcEvents.SetDesktopCapturerSourceId,
+									id,
+								);
+								if (isEntireScreen) {
+									handleNextEntireScreen();
+								} else {
+									handleNextApplicationWindow();
 								}
-							}}
-						/>
-					</Col>
+							} catch (error) {
+								setSourceError(
+									error instanceof Error ? error.message : String(error),
+								);
+							} finally {
+								setIsPreparing(false);
+							}
+						}}
+					/>
 				);
 			})}
 			{isPreparing && (
-				<Col xs={12}>
+				<div style={{ gridColumn: '1 / -1' }}>
 					<Spinner size={24} />
-				</Col>
+				</div>
 			)}
 			{sourceError && (
-				<Col xs={12}>
+				<div style={{ gridColumn: '1 / -1' }}>
 					<Text role="alert" style={{ color: '#C23030' }}>
 						{sourceError}
 					</Text>
-				</Col>
+				</div>
 			)}
-		</Row>
+		</div>
 	);
 }

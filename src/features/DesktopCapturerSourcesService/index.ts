@@ -101,11 +101,25 @@ class DesktopCapturerSourcesService {
 		[...this.sources.keys()].forEach((key) => {
 			const source = this.sources.get(key);
 			if (!source) return;
-			if (source.type === DesktopCapturerSourceType.WINDOW) {
-				appWindowSources.push(source.source);
-			}
+			if (source.type !== DesktopCapturerSourceType.WINDOW) return;
+			// Never list AltronScreen's own windows (the main window and the
+			// hidden WebRTC helper renderer), which the user cannot meaningfully
+			// share and which otherwise clutter the list.
+			if (this.isOwnAppWindow(source.source.name)) return;
+			appWindowSources.push(source.source);
 		});
 		return appWindowSources;
+	}
+
+	/**
+	 * Whether a captured window is AltronScreen's internal WebRTC helper
+	 * renderer. That window is hidden and exists only to run the capture
+	 * pipeline, so it is never a meaningful share target. Kept intentionally
+	 * narrow so ordinary application windows are unaffected.
+	 */
+	isOwnAppWindow(name: string | undefined): boolean {
+		if (!name) return false;
+		return name.toLowerCase().includes('electron helper renderer');
 	}
 
 	getSourceDisplayIDByDisplayCapturerSourceID(sourceID: string): string {

@@ -24,9 +24,11 @@ const useStyles = makeStyles(() =>
 		},
 		overlayInnerRoot: { width: '90%', height: '90%' },
 		sharePreviewsContainer: {
-			top: '60px',
 			position: 'relative',
-			height: '100%',
+			width: '100%',
+			paddingTop: '72px',
+			paddingBottom: '24px',
+			overflow: 'visible',
 		},
 	}),
 );
@@ -265,7 +267,6 @@ export default function ChooseAppOrScreenOverlay(
 					style={{
 						position: 'relative',
 						zIndex: '1',
-						height: 'calc(87vh - 80px)',
 						minHeight: '400px',
 					}}
 				>
@@ -290,7 +291,7 @@ export default function ChooseAppOrScreenOverlay(
 						<div
 							style={{
 								position: 'relative',
-								height: '100%',
+								width: '100%',
 							}}
 						>
 							<Row>

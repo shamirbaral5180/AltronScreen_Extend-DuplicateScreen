@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Text, Card, Spinner } from '@blueprintjs/core';
-import { Row, Col } from 'react-flexbox-grid';
 import { IpcEvents } from '../../../../common/IpcEvents.enum';
 import { useTranslation } from 'react-i18next';
 
@@ -44,6 +43,7 @@ const SharingSourcePreviewCard: React.FC<SharingSourcePreviewCardProps> = (
 
 	useEffect(() => {
 		if (!isVisible) return;
+		let cancelled = false;
 		const timer = setTimeout(async () => {
 			if (!sharingSourceID) return;
 			const sources = await window.electron.ipcRenderer.invoke(
@@ -52,28 +52,29 @@ const SharingSourcePreviewCard: React.FC<SharingSourcePreviewCardProps> = (
 			);
 
 			const data = sources?.[sharingSourceID];
-			if (data) {
-				setSourceImage((data?.source.thumbnail as unknown as string) || '');
-				if (data?.source.appIcon != null) {
-					setAppIconSourceImage(
-						(data?.source.appIcon as unknown as string) || '',
-					);
-				}
-				setSourceName(data?.source.name || t('failed-to-get-source-name'));
+			if (cancelled || !data) return;
+			setSourceImage((data?.source.thumbnail as unknown as string) || '');
+			if (data?.source.appIcon != null) {
+				setAppIconSourceImage(
+					(data?.source.appIcon as unknown as string) || '',
+				);
 			}
+			setSourceName(data?.source.name || t('failed-to-get-source-name'));
 		}, 200);
 
-		return () => clearTimeout(timer);
+		return () => {
+			cancelled = true;
+			clearTimeout(timer);
+		};
 	}, [isVisible, sharingSourceID]);
 
 	return (
-		<div ref={rootRef}>
+		<div ref={rootRef} className="share-preview-card-root">
 			<Card
 				className="preview-share-thumb-container"
+				interactive={Boolean(onClickCard)}
 				onClick={onClickCard ? () => onClickCard() : undefined}
 				style={{
-					height: '200px',
-					minWidth: '250px',
 					backgroundColor:
 						isHovered && isChangeAppearanceOnHover
 							? '#2B95D6'
@@ -83,67 +84,29 @@ const SharingSourcePreviewCard: React.FC<SharingSourcePreviewCardProps> = (
 				onMouseOver={() => setIsHovered(true)}
 				onMouseLeave={() => setIsHovered(false)}
 			>
-				<Row
-					center="xs"
-					middle="xs"
-					style={{ height: '95%', minWidth: '200px' }}
+				<div className="share-preview-thumb">
+					{sourceImage !== '' ? (
+						<img src={sourceImage} alt="" className="share-preview-image" />
+					) : (
+						<Spinner size={40} />
+					)}
+					{appIconSourceImage !== '' && (
+						<div className="share-preview-app-icon">
+							<img src={appIconSourceImage} alt="" />
+						</div>
+					)}
+				</div>
+				<div
+					className="share-preview-name"
+					style={{
+						backgroundColor:
+							isHovered && isChangeAppearanceOnHover
+								? 'rgba(0, 0, 0, 0.8)'
+								: 'rgba(0, 0, 0, 0.45)',
+					}}
 				>
-					<Col xs={12}>
-						{sourceImage !== '' ? (
-							<>
-								<img
-									src={sourceImage}
-									alt=""
-									style={{ height: '143px', maxWidth: '100%' }}
-								/>
-								{appIconSourceImage !== '' ? (
-									<Card
-										style={{
-											position: 'absolute',
-											width: '40px',
-											height: '40px',
-											transform: 'translate(0px, -45px)',
-											borderRadius: '500px',
-											padding: '0px',
-											margin: '0px',
-										}}
-										elevation={4}
-									>
-										<Row center="xs" middle="xs" style={{ height: '100%' }}>
-											<img
-												src={appIconSourceImage}
-												alt=""
-												style={{
-													width: '25px',
-													height: '25px',
-												}}
-											/>
-										</Row>
-									</Card>
-								) : (
-									<> </>
-								)}
-							</>
-						) : (
-							<Spinner size={60} />
-						)}
-					</Col>
-				</Row>
-				<Row center="xs">
-					<Col
-						xs={12}
-						style={{
-							backgroundColor:
-								isHovered && isChangeAppearanceOnHover
-									? 'rgba(0,0,0,0.8)'
-									: 'rgba(0,0,0,0.45)',
-							color: 'white',
-							textAlign: 'center',
-						}}
-					>
-						<Text ellipsize>{sourceName}</Text>
-					</Col>
-				</Row>
+					<Text ellipsize>{sourceName}</Text>
+				</div>
 			</Card>
 		</div>
 	);

@@ -111,6 +111,81 @@ body {
 	height: 0%;
 }
 
+/* Screen/application share preview cards: a uniform grid of tiles where the
+   thumbnail fills a fixed area and the name bar spans the full card width. */
+.share-preview-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+	gap: 16px;
+	width: 100%;
+	align-items: stretch;
+}
+
+.share-preview-card-root {
+	width: 100%;
+	height: 100%;
+}
+
+.preview-share-thumb-container {
+	display: flex;
+	flex-direction: column;
+	width: 100%;
+	height: 200px;
+	padding: 0 !important;
+	overflow: hidden;
+	border-radius: 6px;
+	transition: background-color 0.15s ease-in-out;
+}
+
+.share-preview-thumb {
+	position: relative;
+	flex: 1 1 auto;
+	min-height: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background-color: #1b1b1b;
+	overflow: hidden;
+}
+
+.share-preview-image {
+	max-width: 100%;
+	max-height: 100%;
+	width: auto;
+	height: auto;
+	object-fit: contain;
+	display: block;
+}
+
+.share-preview-app-icon {
+	position: absolute;
+	left: 10px;
+	bottom: 10px;
+	width: 40px;
+	height: 40px;
+	border-radius: 500px;
+	background: #ffffff;
+	box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	overflow: hidden;
+}
+
+.share-preview-app-icon img {
+	width: 26px;
+	height: 26px;
+	object-fit: contain;
+}
+
+.share-preview-name {
+	flex: 0 0 auto;
+	width: 100%;
+	padding: 6px 10px;
+	color: #ffffff;
+	text-align: center;
+}
+
 /* UI colors START */
 .bp3-button:not([class*="bp3-intent-"]) {
 	background-color: var(--light-btn-no-intent-color);
