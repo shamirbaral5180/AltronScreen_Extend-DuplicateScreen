@@ -1,3 +1,11 @@
+# 1.4.1
+
+- Fixed "Add another screen" adding several screens at once: the count is now
+  based on the live number of virtual monitors, and removing a screen resets the
+  persisted count, so each add/remove affects exactly one screen.
+- Added a "Remove a screen" button in the screen-selection dialog to remove
+  virtual (extended) screens one at a time.
+
 # 1.4.0
 
 - Fixed the extended screen not being removed on close: the app now removes the

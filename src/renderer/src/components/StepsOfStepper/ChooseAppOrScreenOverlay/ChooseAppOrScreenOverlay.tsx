@@ -87,13 +87,36 @@ export default function ChooseAppOrScreenOverlay(
 				await handleRefreshSources();
 			} else {
 				setAddDisplayMessage(
-					result?.message ||
-						t('virtual-display-driver-required'),
+					result?.message || t('virtual-display-driver-required'),
 				);
 			}
 		} catch (error) {
 			console.error('Failed to add virtual display:', error);
 			setAddDisplayMessage(t('virtual-display-driver-required'));
+		} finally {
+			setIsAddingDisplay(false);
+		}
+	}, [isAddingDisplay, handleRefreshSources, t]);
+
+	const handleRemoveVirtualDisplay = useCallback(async () => {
+		if (isAddingDisplay) return;
+		setIsAddingDisplay(true);
+		setAddDisplayMessage('');
+		try {
+			const result = await window.electron.ipcRenderer.invoke(
+				IpcEvents.RemoveVirtualDisplay,
+			);
+			if (result?.ok) {
+				// Refresh so the removed screen disappears from the list.
+				await handleRefreshSources();
+			} else {
+				setAddDisplayMessage(
+					result?.message || t('no-virtual-screen-to-remove'),
+				);
+			}
+		} catch (error) {
+			console.error('Failed to remove virtual display:', error);
+			setAddDisplayMessage(t('no-virtual-screen-to-remove'));
 		} finally {
 			setIsAddingDisplay(false);
 		}
@@ -289,14 +312,19 @@ export default function ChooseAppOrScreenOverlay(
 											<Col>
 												<Card
 													interactive
-													onClick={handleAddVirtualDisplay}
+													onClick={
+														isAddingDisplay
+															? undefined
+															: handleAddVirtualDisplay
+													}
 													style={{
 														width: '250px',
-														height: '200px',
+														height: '230px',
 														display: 'flex',
 														flexDirection: 'column',
 														alignItems: 'center',
 														justifyContent: 'center',
+														gap: '8px',
 														border: '2px dashed #48AFF0',
 														boxShadow: 'none',
 													}}
@@ -311,9 +339,21 @@ export default function ChooseAppOrScreenOverlay(
 																intent="primary"
 																style={{ borderRadius: '100px' }}
 															/>
-															<H3 style={{ marginTop: '12px', marginBottom: '0' }}>
+															<H3
+																style={{ marginTop: '12px', marginBottom: '0' }}
+															>
 																{t('add-another-screen')}
 															</H3>
+															<Button
+																icon="remove"
+																text={t('remove-a-screen')}
+																intent="danger"
+																style={{ borderRadius: '100px' }}
+																onClick={(event) => {
+																	event.stopPropagation();
+																	void handleRemoveVirtualDisplay();
+																}}
+															/>
 														</>
 													)}
 												</Card>

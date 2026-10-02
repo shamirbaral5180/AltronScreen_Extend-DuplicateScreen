@@ -44,4 +44,5 @@ export enum IpcEvents {
 	GetVirtualDisplayCount = 'get-virtual-display-count',
 	SetVirtualDisplayCount = 'set-virtual-display-count',
 	AddVirtualDisplay = 'add-virtual-display',
+	RemoveVirtualDisplay = 'remove-virtual-display',
 }

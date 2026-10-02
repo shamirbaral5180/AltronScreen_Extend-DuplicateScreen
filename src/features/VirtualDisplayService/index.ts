@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { screen } from 'electron';
 import Logger from '../../main/utils/LoggerWithFilePrefix';
 
 export interface VirtualDisplayRequest {
@@ -205,6 +206,23 @@ export default class VirtualDisplayService {
 	}
 
 	/**
+	 * Count the virtual monitors currently active, identified by the driver's
+	 * monitor label ("VDD by MTT"). This is authoritative and unaffected by a
+	 * stale persisted count. Only Electron's `screen` API is used, so it is safe
+	 * to call from the main process.
+	 */
+	countActiveVirtualMonitors(): number {
+		if (process.platform !== 'win32') return 0;
+		try {
+			return screen
+				.getAllDisplays()
+				.filter((display) => /VDD/i.test(display.label ?? '')).length;
+		} catch {
+			return 0;
+		}
+	}
+
+	/**
 	 * Create (or reconfigure) a single virtual monitor sized to the viewer's
 	 * resolution. Returns true when the driver acknowledged the command.
 	 */
@@ -366,6 +384,18 @@ export default class VirtualDisplayService {
 		if (process.platform !== 'win32') {
 			return false;
 		}
+
+		// Reset the persisted count first. Otherwise the XML keeps the old count
+		// (the driver clamps 0 to 1 only for its own reload), and a later "add"
+		// would read that stale value and recreate several monitors at once.
+		await this.writeSettingsFile(
+			{
+				width: DEFAULT_VIRTUAL_DISPLAY_RESOLUTION.width,
+				height: DEFAULT_VIRTUAL_DISPLAY_RESOLUTION.height,
+				refreshHz: 60,
+			},
+			0,
+		);
 
 		if (!(await this.isRootDevicePresent())) {
 			this.virtualDisplayActive = false;

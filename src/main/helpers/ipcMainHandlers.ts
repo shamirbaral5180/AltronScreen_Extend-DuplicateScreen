@@ -565,16 +565,19 @@ export const initIpcMainHandlers = (mainWindow: BrowserWindow): void => {
 			}
 		}
 
-		// Driver present: add one more virtual display.
-		const currentCount = await virtualDisplayService.getActiveDisplayCount();
-		if (currentCount >= 16) {
+		// Add exactly one virtual display. The live count of active virtual
+		// monitors is authoritative (the persisted XML count can be stale), so we
+		// add one to the number of VDD monitors actually present right now.
+		const previousDisplayCount = screen.getAllDisplays().length;
+		const currentVirtualCount =
+			virtualDisplayService.countActiveVirtualMonitors();
+		if (currentVirtualCount >= 16) {
 			return {
 				ok: false,
 				message: 'The maximum of 16 virtual screens has been reached.',
 			};
 		}
-		const nextCount = (Number.isFinite(currentCount) ? currentCount : 0) + 1;
-		const previousDisplayCount = screen.getAllDisplays().length;
+		const nextCount = currentVirtualCount + 1;
 
 		const saved = getVirtualDisplayResolution();
 		const width = saved.width;
@@ -611,6 +614,55 @@ export const initIpcMainHandlers = (mainWindow: BrowserWindow): void => {
 					'Windows did not activate the new screen. Run AltronScreen as administrator and try again.',
 			};
 		}
+
+		return { ok: true, count: nextCount };
+	});
+
+	ipcMain.handle(IpcEvents.RemoveVirtualDisplay, async () => {
+		const altronscreenGlobal = getAltronScreenGlobal();
+		const virtualDisplayService = altronscreenGlobal.virtualDisplayService;
+
+		if (!virtualDisplayService.isSupported().supported) {
+			return { ok: false, reason: 'unsupported-platform' };
+		}
+
+		const currentVirtualCount =
+			virtualDisplayService.countActiveVirtualMonitors();
+		if (currentVirtualCount <= 0) {
+			return { ok: false, message: 'No virtual screen to remove.' };
+		}
+
+		// Remove exactly one virtual screen: set the count to one less than the
+		// live number of virtual monitors, or remove the device entirely when the
+		// last one is being removed.
+		const nextCount = currentVirtualCount - 1;
+		const saved = getVirtualDisplayResolution();
+		const previousDisplayCount =
+			virtualDisplayService.countActiveVirtualMonitors();
+		const ok = await virtualDisplayService.setDisplayCount(nextCount, {
+			width: saved.width,
+			height: saved.height,
+			refreshHz: 60,
+		});
+
+		if (!ok) {
+			return {
+				ok: false,
+				reason: 'driver-not-available',
+				message: 'The virtual screen could not be removed.',
+			};
+		}
+
+		// Wait for Windows to drop the monitor, then refresh capture sources.
+		const deadline = Date.now() + 10000;
+		while (
+			virtualDisplayService.countActiveVirtualMonitors() >=
+				previousDisplayCount &&
+			Date.now() < deadline
+		) {
+			await new Promise((resolve) => setTimeout(resolve, 250));
+		}
+		await altronscreenGlobal.desktopCapturerSourcesService.refreshDesktopCapturerSources();
 
 		return { ok: true, count: nextCount };
 	});

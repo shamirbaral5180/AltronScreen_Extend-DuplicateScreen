@@ -183,6 +183,8 @@
 	"virtual-display-count": "Virtual display count",
 	"virtual-displays-explanation": "Add or remove virtual (extended) displays. Each display appears as an extra monitor you can share. They are removed automatically when the app closes.",
 	"add-another-screen": "Add another screen",
+	"remove-a-screen": "Remove a screen",
+	"no-virtual-screen-to-remove": "No extra screen available to remove.",
 	"Streaming settings": "Streaming settings",
 	"Saved defaults apply to new connections. Save to update active viewers without disconnecting them.": "Saved defaults apply to new connections. Save to update active viewers without disconnecting them.",
 	"Preset": "Preset",
