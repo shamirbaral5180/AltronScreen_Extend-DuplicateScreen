@@ -145,15 +145,10 @@ export const initIpcMainHandlers = (mainWindow: BrowserWindow): void => {
 			},
 		);
 
-		altronscreenGlobal.rendererWebrtcHelpersService.helpers.forEach(
-			(helperWindow) => {
-				helperWindow.close();
-			},
-		);
+		altronscreenGlobal.rendererWebrtcHelpersService.closeAll();
 
 		altronscreenGlobal.sharingSessionService.waitingForConnectionSharingSession =
 			null;
-		altronscreenGlobal.rendererWebrtcHelpersService.helpers.clear();
 		altronscreenGlobal.sharingSessionService.sharingSessions.clear();
 	});
 
@@ -574,18 +569,11 @@ export const initIpcMainHandlers = (mainWindow: BrowserWindow): void => {
 		const width = saved.width;
 		const height = saved.height;
 
-		// This is the deliberate add-screen action, so a device restart is
-		// permitted here to rebuild the monitor stack. Removal and shutdown
-		// never restart the device.
-		const ok = await virtualDisplayService.setDisplayCount(
-			nextCount,
-			{
-				width,
-				height,
-				refreshHz: 60,
-			},
-			{ restartDevice: true },
-		);
+		const ok = await virtualDisplayService.setDisplayCount(nextCount, {
+			width,
+			height,
+			refreshHz: 60,
+		});
 
 		if (!ok) {
 			return {
@@ -637,7 +625,6 @@ export const initIpcMainHandlers = (mainWindow: BrowserWindow): void => {
 					height,
 					refreshHz: 60,
 				},
-				{},
 			);
 
 			// Give the OS a moment to register/remove monitors, then refresh.

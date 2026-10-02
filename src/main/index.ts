@@ -206,13 +206,22 @@ export default class AltronScreenApp {
 		let displayCleanupStarted = false;
 		let quitAfterCleanup = false;
 		app.on('before-quit', (event) => {
-			getAltronScreenGlobal().lanDiscoveryService.stop();
+			const global = getAltronScreenGlobal();
+			global.lanDiscoveryService.stop();
 			if (quitAfterCleanup) return;
 			event.preventDefault();
 			if (displayCleanupStarted) return;
 			displayCleanupStarted = true;
-			void getAltronScreenGlobal()
-				.virtualDisplayService.destroyDisplaySilently()
+			void (async () => {
+				// Order matters: stop all live captures first (closing the WebRTC
+				// helper renderers releases the desktop-duplication handles), then
+				// give the OS a moment, and only then remove the virtual displays.
+				// Removing a display while it is still being captured can deadlock
+				// the display stack and freeze the PC.
+				global.rendererWebrtcHelpersService.closeAll();
+				await new Promise((resolve) => setTimeout(resolve, 500));
+				await global.virtualDisplayService.destroyDisplaySilently();
+			})()
 				.catch(() => undefined)
 				.finally(() => {
 					quitAfterCleanup = true;

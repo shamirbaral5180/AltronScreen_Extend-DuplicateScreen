@@ -70,4 +70,21 @@ export default class RendererWebrtcHelpersService {
 
 		return helperRendererWindow;
 	}
+
+	/**
+	 * Close every WebRTC helper window. Closing a helper disposes its renderer,
+	 * which stops any active getDisplayMedia capture and releases the underlying
+	 * desktop-duplication handles. This must run before removing virtual
+	 * displays so the driver is not torn down while captures are still active.
+	 */
+	closeAll(): void {
+		for (const helper of [...this.helpers.values()]) {
+			try {
+				if (!helper.isDestroyed()) helper.destroy();
+			} catch {
+				// best-effort: a helper may already be closing
+			}
+		}
+		this.helpers.clear();
+	}
 }

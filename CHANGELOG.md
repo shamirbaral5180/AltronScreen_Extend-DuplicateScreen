@@ -1,8 +1,14 @@
 # 1.3.0
 
-- Fixed a freeze that could require a PC restart when closing the app. Closing
-  no longer restarts the display device and never blocks quitting; cleanup is
-  bounded and skipped when no extended screen was created.
+- Fixed a freeze that could require a PC restart when closing the app, especially
+  with several extended screens and multiple viewers connected.
+- The app no longer runs `pnputil /restart-device` at all. Restarting the display
+  device resets the whole display stack (freezing a live desktop) and could even
+  remove the virtual display device.
+- On close, all live captures are stopped first (releasing the desktop
+  duplication handles), then the extended displays are removed via a soft driver
+  reload, then the app quits. Cleanup is bounded and skipped when no extended
+  screen was created.
 - The extended (virtual) display now advertises several resolutions, so its
   resolution can be changed in Windows Display Settings without recreating it.
 - Added the default extended-screen resolution of 1360x768, and a Settings

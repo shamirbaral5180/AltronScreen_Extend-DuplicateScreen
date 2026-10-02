@@ -39,7 +39,7 @@ app.whenReady().then(async () => {
     assert.equal(restarts.length, 0, 'inactive shutdown must not touch the device');
 
     // 2. Adding a display writes several resolutions and offers 1360x768 first.
-    const added = await service.setDisplayCount(1, { width: 1360, height: 768, refreshHz: 60 }, { restartDevice: true });
+    const added = await service.setDisplayCount(1, { width: 1360, height: 768, refreshHz: 60 });
     assert.equal(added, true);
     const xml = fs.readFileSync(fixture, 'utf8');
     const widths = [...xml.matchAll(/<width>(\d+)<\/width>/g)].map(match => Number(match[1]));
@@ -48,7 +48,7 @@ app.whenReady().then(async () => {
     const heights = [...xml.matchAll(/<height>(\d+)<\/height>/g)].map(match => Number(match[1]));
     assert.equal(heights[0], 768);
     assert.ok(widths.includes(1920) && widths.includes(3840), 'standard sizes must be advertised');
-    assert.equal(restarts.filter(([file]) => file === 'pnputil.exe').length, 1, 'add-screen may restart the device once');
+    assert.equal(restarts.filter(([file]) => file === 'pnputil.exe').length, 0, 'adding a screen must never restart the display device');
 
     // 3. Shutdown removes the display WITHOUT restarting the device.
     const before = restarts.length;
@@ -57,7 +57,31 @@ app.whenReady().then(async () => {
     assert.equal(afterRemoval.length, 0, 'shutdown must not run pnputil /restart-device');
     assert.equal(service.isActive(), false);
 
-    console.log('SHUTDOWN_RESOLUTION_REGRESSION_PASS:', JSON.stringify({ advertised: widths, restarts: restarts.length }));
+    // 4. Quit ordering: captures must stop BEFORE virtual displays are removed.
+    const order = [];
+    const originalCloseAll = global.rendererWebrtcHelpersService.closeAll.bind(global.rendererWebrtcHelpersService);
+    global.rendererWebrtcHelpersService.closeAll = () => { order.push('closeCaptures'); };
+    const originalDestroy = service.destroyDisplaySilently.bind(service);
+    service.destroyDisplaySilently = async () => { order.push('removeDisplays'); };
+    const originalQuit = app.quit.bind(app);
+    let quitCalled = false;
+    app.quit = () => { quitCalled = true; order.push('quit'); };
+
+    // Ensure a display appears active so cleanup is exercised.
+    await service.setDisplayCount(1, { width: 1360, height: 768, refreshHz: 60 }, {});
+    let prevented = false;
+    app.emit('before-quit', { preventDefault: () => { prevented = true; } });
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    global.rendererWebrtcHelpersService.closeAll = originalCloseAll;
+    service.destroyDisplaySilently = originalDestroy;
+    app.quit = originalQuit;
+
+    assert.ok(prevented, 'before-quit must defer the first quit to allow cleanup');
+    assert.deepEqual(order, ['closeCaptures', 'removeDisplays', 'quit'], `captures must stop before displays are removed: ${JSON.stringify(order)}`);
+    assert.ok(quitCalled, 'app must quit after cleanup');
+
+    console.log('SHUTDOWN_ORDER_PASS:', JSON.stringify(order));
+    console.log('SHUTDOWN_RESOLUTION_REGRESSION_PASS:', JSON.stringify({ advertised: widths, restarts: restarts.length, order }));
     app.exit(0);
   } catch (error) {
     console.error('SHUTDOWN_RESOLUTION_REGRESSION_FAIL:', error);

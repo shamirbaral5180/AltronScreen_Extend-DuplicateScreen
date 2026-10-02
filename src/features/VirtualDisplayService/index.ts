@@ -103,19 +103,18 @@ export default class VirtualDisplayService {
 	}
 
 	/**
-	 * Synchronous best-effort check for the presence of the VDD driver. The
-	 * named pipe is created by the driver when its root device is active, so it
-	 * is the most reliable signal that the driver is actually installed AND
-	 * running. A stale DLL in System32 (e.g. from a partial install) is not
-	 * enough — we also verify the device/pipe.
+	 * Best-effort check that the driver is usable. The named pipe only exists
+	 * while the root device is present and running, so it is the reliable
+	 * runtime signal. The root-enumerated device can be removed (for example by
+	 * a device restart), in which case the driver package or UMDF DLL may still
+	 * be present; reporting "not installed" then lets the app recreate the
+	 * device instead of silently failing.
 	 */
 	isDriverInstalledSync(): boolean {
 		if (process.platform !== 'win32') {
 			return false;
 		}
 
-		// Primary signal: the named pipe exists while the driver device is
-		// loaded, even before any virtual display is activated.
 		try {
 			if (fs.existsSync(VDD_PIPE_PATH)) {
 				return true;
@@ -124,21 +123,7 @@ export default class VirtualDisplayService {
 			// fall through
 		}
 
-		// Secondary signal: the root device is present (via pnputil) AND the
-		// UMDF DLL exists.
-		const umdfDriverDll = path.join(
-			process.env.SystemRoot ?? 'C:\\Windows',
-			'System32',
-			'drivers',
-			'UMDF',
-			'MttVDD.dll',
-		);
-
-		try {
-			return fs.existsSync(umdfDriverDll) && this.isRootDevicePresentSync();
-		} catch {
-			return false;
-		}
+		return this.isRootDevicePresentSync();
 	}
 
 	private isRootDevicePresentSync(): boolean {
@@ -198,7 +183,6 @@ export default class VirtualDisplayService {
 	async setDisplayCount(
 		count: number,
 		request?: VirtualDisplayRequest,
-		options: { restartDevice?: boolean } = {},
 	): Promise<boolean> {
 		if (process.platform !== 'win32') {
 			this.log.debug('setDisplayCount skipped: unsupported platform');
@@ -226,22 +210,12 @@ export default class VirtualDisplayService {
 			);
 			if (/failed|unknown command|error/i.test(response)) return false;
 			if ((await this.getActiveDisplayCount()) !== targetCount) return false;
-			if (targetCount > 0) {
-				this.virtualDisplayActive = true;
-			} else {
-				this.virtualDisplayActive = false;
-			}
-			// Restarting the display device resets the whole display stack and can
-			// freeze a live desktop, so it is opt-in only (the deliberate add-screen
-			// flow). Removal and shutdown never restart the device; the driver's own
-			// SETDISPLAYCOUNT reload is sufficient.
-			if (options.restartDevice) {
-				await execFileAsync(
-					'pnputil.exe',
-					['/restart-device', '/deviceid', 'Root\\MttVDD'],
-					{ windowsHide: true, timeout: 15000 },
-				);
-			}
+			this.virtualDisplayActive = targetCount > 0;
+			// The driver's own SETDISPLAYCOUNT reload rebuilds the monitor stack.
+			// We deliberately never call `pnputil /restart-device`: restarting the
+			// display device resets the whole display stack (freezing a live
+			// desktop) and can even remove the root device. Extend mode is only a
+			// projection change, which is safe.
 			if (targetCount > 0) {
 				await execFileAsync('DisplaySwitch.exe', ['/extend'], {
 					windowsHide: true,
