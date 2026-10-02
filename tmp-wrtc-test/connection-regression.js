@@ -68,6 +68,7 @@ app.whenReady().then(async () => {
     const ip = await host.webContents.executeJavaScript("window.electron.ipcRenderer.invoke('get-local-lan-ip')");
     viewer = new BrowserWindow({ show: false, webPreferences: { backgroundThrottling: false } });
     await viewer.loadURL(`http://${ip}:${port}/`);
+    await waitFor(() => viewer.webContents.executeJavaScript("(() => { const link = document.querySelector('[data-testid=connect-current-host]'); if (!link) return false; link.click(); return true; })()"), 'viewer clicks host URL');
     await waitFor(() => global.connectedDevicesService.pendingConnectionDevice.id, 'viewer approval request');
     let sharing = global.sharingSessionService.waitingForConnectionSharingSession;
     let helper = sharing.peerConnectionHelperRenderer;
@@ -126,6 +127,7 @@ app.whenReady().then(async () => {
         assert.equal(global.connectedDevicesService.getDevices().length, 0);
         console.log('CONNECTION_FAILURE_UI_PASS:', errorText);
         viewer.reload();
+        await waitFor(() => viewer.webContents.executeJavaScript("(() => { const link = document.querySelector('[data-testid=connect-current-host]'); if (!link) return false; link.click(); return true; })()"), 'viewer requests reconnection');
         await waitFor(() => global.connectedDevicesService.pendingConnectionDevice.id, 'new viewer approval after failure');
         sharing = global.sharingSessionService.waitingForConnectionSharingSession;
         helper = sharing.peerConnectionHelperRenderer;

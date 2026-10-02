@@ -1,3 +1,12 @@
+# 1.2.0
+
+- The viewer now opens a home screen with a list of nearby AltronScreen computers instead of the previous error dialog after disconnecting.
+- Clicking a nearby computer or the current address sends a fresh access request that the host can Allow or Deny, as before.
+- Nearby computers are discovered over the local network; a manual URL entry is available when discovery broadcasts are blocked.
+- A Disconnect button in the player and automatic disconnect handling return to the home screen without re-requesting access.
+- Added saved streaming settings (preset, frame rate, resolution, bitrate, latency, and content preference) under Settings, with live options.
+- Frame rate, resolution, and content hint apply to capture; bitrate, frame rate cap, and degradation preference apply to the encoder; latency applies to receiver buffering where supported.
+
 # 1.1.0
 
 - Connect multiple viewing devices simultaneously using the same LAN URL.

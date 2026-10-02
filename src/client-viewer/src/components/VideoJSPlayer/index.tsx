@@ -98,7 +98,7 @@ function VideoJSPlayer(props: VideoJSPlayerProps) {
 			// eslint-disable-next-line no-console
 			console.error('Failed to attach MediaStream to element', e);
 		}
-	}, [stream, playing]);
+	}, [stream, playing, containerEl]);
 
 	useEffect(() => {
 		const player = playerRef.current;
@@ -108,7 +108,7 @@ function VideoJSPlayer(props: VideoJSPlayerProps) {
 		} else {
 			player.pause && player.pause();
 		}
-	}, [playing]);
+	}, [playing, containerEl]);
 
 	return null;
 }

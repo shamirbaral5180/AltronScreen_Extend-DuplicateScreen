@@ -10,6 +10,8 @@ export const CANVAS_SCALE_MULTIPLIER = 0.125; // 1/8 of original canvas size, to
 export const MISMATCH_PERCENT_THRESHOLD = 0.1;
 
 export default class VideoAutoQualityOptimizer {
+	private interval: ReturnType<typeof setInterval> | null = null;
+	private preparation: ReturnType<typeof setTimeout> | null = null;
 	video: undefined | HTMLVideoElement;
 
 	canvas: undefined | HTMLCanvasElement;
@@ -37,8 +39,9 @@ export default class VideoAutoQualityOptimizer {
 	}
 
 	startOptimizationLoop() {
+		this.stopOptimizationLoop();
 		this.prepareCanvasAndVideo();
-		setInterval(() => {
+		this.interval = setInterval(() => {
 			try {
 				this.doFrameComparisonAndQualityOptimization();
 			} catch (e) {
@@ -50,7 +53,18 @@ export default class VideoAutoQualityOptimizer {
 		}, 1000);
 	}
 
+	stopOptimizationLoop() {
+		if (this.interval) clearInterval(this.interval);
+		if (this.preparation) clearTimeout(this.preparation);
+		this.interval = null;
+		this.preparation = null;
+		this.video = undefined;
+		this.canvas = undefined;
+		this.prevFrame = undefined;
+	}
+
 	doFrameComparisonAndQualityOptimization() {
+		this.findAndSetVideoInternalVariable(document);
 		this.validateBeforeCalculations();
 		this.clearCanvas();
 		this.scaleCanvas();
@@ -80,7 +94,7 @@ export default class VideoAutoQualityOptimizer {
 
 	findAndSetVideoInternalVariable(document: Document) {
 		this.video = document.querySelector(
-			`#${PLAYER_WRAPPER_ID} > video`,
+			`#${PLAYER_WRAPPER_ID} video`,
 		) as HTMLVideoElement;
 	}
 
@@ -91,7 +105,7 @@ export default class VideoAutoQualityOptimizer {
 	}
 
 	prepareCanvasAndVideo() {
-		setTimeout(() => {
+		this.preparation = setTimeout(() => {
 			this.findAndSetVideoInternalVariable(document);
 			this.findAndSetCanvasInternalVariable(document);
 		}, 1000);

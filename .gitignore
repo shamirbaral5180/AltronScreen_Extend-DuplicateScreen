@@ -15,6 +15,7 @@ src/client-viewer/node_modules
 *.pid
 *.tsbuildinfo
 tmp-wrtc-test/*report.json
+tmp-wrtc-test/*-data/
 tsconfig.web.tsbuildinfo
 src/client-viewer/.env
 

@@ -91,6 +91,25 @@ export function handleIpcRenderer(): void {
 		);
 
 		window.electron.ipcRenderer.on(
+			'stream-settings-changed',
+			async (_, settings, requestID: string) => {
+				try {
+					await sourceReady;
+					if (peerConnection)
+						await peerConnection.applyStreamSettings(settings);
+					window.electron.ipcRenderer.send('stream-settings-changed-result', {
+						requestID,
+					});
+				} catch (error) {
+					window.electron.ipcRenderer.send('stream-settings-changed-result', {
+						requestID,
+						error: String(error),
+					});
+				}
+			},
+		);
+
+		window.electron.ipcRenderer.on(
 			'call-peer',
 			async (_, _sourceId, requestID: string) => {
 				try {

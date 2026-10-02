@@ -9,7 +9,6 @@ import {
 	prepare as prepareMessage,
 	type ProcessedPayload,
 } from '../../utils/message';
-import setSdpMediaBitrate from './setSdpMediaBitrate';
 import VideoAutoQualityOptimizer from '../VideoAutoQualityOptimizer';
 import {
 	VideoQuality,
@@ -17,10 +16,7 @@ import {
 } from '../VideoAutoQualityOptimizer/VideoQualityEnum';
 import { prepareDataMessageToChangeQuality } from './simplePeerDataMessages';
 import { VIDEO_QUALITY_TO_DECIMAL } from './../../constants/appConstants';
-import {
-	STUN_ICE_SERVERS,
-	MAX_VIDEO_BITRATE,
-} from './webRtcPeerOptions';
+import { STUN_ICE_SERVERS } from './webRtcPeerOptions';
 import { ErrorMessage } from '../../components/ErrorDialog/ErrorMessageEnum';
 import peerConnectionHandleSocket from './peerConnectionHandleSocket';
 import peerConnectionHandlePeer from './peerConnectionHandlePeer';
@@ -34,6 +30,7 @@ import PeerConnectionUserIsNotDefinedError from './errors/PeerConnectionUserIsNo
 import PeerConnectionPartnerIsNotDefinedError from './errors/PeerConnectionPartnerIsNotDefinedError';
 
 export default class PeerConnection {
+	destroyed = false;
 	roomId: string;
 
 	socket: Socket | null = null;
@@ -63,6 +60,7 @@ export default class PeerConnection {
 	videoAutoQualityOptimizer: VideoAutoQualityOptimizer;
 
 	isStreamStarted: boolean = false;
+	remoteStream: MediaStream | null = null;
 
 	UIHandler: PeerConnectionUIHandler;
 
@@ -117,6 +115,8 @@ export default class PeerConnection {
 	}
 
 	stopStream() {
+		this.remoteStream?.getTracks().forEach((track) => track.stop());
+		this.remoteStream = null;
 		// stop the video stream by clearing the stream URL
 		this.setUrlCallback(null);
 		this.isStreamStarted = false;
@@ -134,6 +134,9 @@ export default class PeerConnection {
 	}
 
 	destroy() {
+		if (this.destroyed) return;
+		this.destroyed = true;
+		this.videoAutoQualityOptimizer.stopOptimizationLoop();
 		// remove window event listener
 		if (this.beforeunloadHandler) {
 			window.removeEventListener('beforeunload', this.beforeunloadHandler);
@@ -199,15 +202,6 @@ export default class PeerConnection {
 		const peer = new SimplePeer({
 			initiator: false,
 			config: { iceServers: STUN_ICE_SERVERS },
-			sdpTransform: (sdp) => {
-				let newSDP = sdp;
-				newSDP = setSdpMediaBitrate(
-					newSDP as unknown as string,
-					'video',
-					MAX_VIDEO_BITRATE,
-				) as unknown as typeof sdp;
-				return newSDP;
-			},
 		});
 
 		this.peer = peer;
@@ -271,6 +265,7 @@ export default class PeerConnection {
 		socket.removeAllListeners();
 
 		const userCreatedCallback = (createdUser: LocalPeerUser) => {
+			if (this.destroyed) return;
 			this.user = createdUser;
 
 			peerConnectionHandleSocket(this);

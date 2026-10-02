@@ -18,6 +18,7 @@ import LanguageSelector from '../LanguageSelector';
 import { IpcEvents } from '../../../../common/IpcEvents.enum';
 import { useTranslation } from 'react-i18next';
 import './settings-overlay.css';
+import StreamingSettingsPanel from './StreamingSettingsPanel';
 
 interface SettingsOverlayProps {
 	isSettingsOpen: boolean;
@@ -113,6 +114,7 @@ export default function SettingsOverlay(
 						input={<LanguageSelector />}
 					/>
 				</div>
+				<StreamingSettingsPanel />
 
 				<Row
 					center="xs"
@@ -201,6 +203,7 @@ export default function SettingsOverlay(
 					className={`${classes.overlayInsideFade} ${Classes.CARD}`}
 					style={{
 						borderRadius: '8px',
+						overflowY: 'auto',
 					}}
 				>
 					<CloseOverlayButton

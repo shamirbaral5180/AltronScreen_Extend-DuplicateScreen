@@ -6,6 +6,7 @@ import PeerConnectionHelperRendererService from '../PeerConnectionHelperRenderer
 import { Device } from '../../common/Device';
 import { LocalPeerUser } from '../../common/LocalPeerUser';
 import Logger from '../../main/utils/LoggerWithFilePrefix';
+import type { StreamSettings } from '../../common/StreamSettings';
 
 export type SharingSessionStatusChangeListener = (
 	sharingSessionID: string,
@@ -103,7 +104,11 @@ export default class SharingSession {
 		await this.requestHelper('call-peer');
 	}
 
-	private requestHelper(channel: string, sourceId?: string): Promise<void> {
+	async updateStreamSettings(settings: StreamSettings): Promise<void> {
+		await this.requestHelper('stream-settings-changed', settings);
+	}
+
+	private requestHelper(channel: string, sourceId?: unknown): Promise<void> {
 		return new Promise((resolve, reject) => {
 			const helper = this.peerConnectionHelperRenderer;
 			if (!helper || helper.isDestroyed()) {

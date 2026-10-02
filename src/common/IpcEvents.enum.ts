@@ -1,4 +1,6 @@
 export enum IpcEvents {
+	GetStreamSettings = 'get-stream-settings',
+	SetStreamSettings = 'set-stream-settings',
 	CreateWaitingForConnectionSharingSession = 'create-waiting-for-connection-sharing-session',
 	SetPendingConnectionDevice = 'set-pending-connection-device',
 	UnmarkRoomIDAsTaken = 'unmark-room-id-as-taken',

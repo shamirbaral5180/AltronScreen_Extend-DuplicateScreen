@@ -38,6 +38,7 @@ const videoQualityButtonStyle: React.CSSProperties = {
 };
 
 interface PlayerControlPanelProps {
+	handleDisconnect: () => void;
 	onSwitchChangedCallback: (isEnabled: boolean) => void;
 	isPlaying: boolean;
 	isDefaultPlayerTurnedOn: boolean;
@@ -52,6 +53,7 @@ interface PlayerControlPanelProps {
 function PlayerControlPanel(props: PlayerControlPanelProps) {
 	const { t } = useTranslation();
 	const {
+		handleDisconnect,
 		onSwitchChangedCallback,
 		isPlaying,
 		isDefaultPlayerTurnedOn,
@@ -148,14 +150,25 @@ function PlayerControlPanel(props: PlayerControlPanelProps) {
 									height: '42px',
 								}}
 							>
-								<Tooltip content={isPlaying ? t('Click to Pause Video') : t('Click to Play Video')} position={Position.BOTTOM}>
+								<Tooltip
+									content={
+										isPlaying
+											? t('Click to Pause Video')
+											: t('Click to Play Video')
+									}
+									position={Position.BOTTOM}
+								>
 									<Button
 										minimal
 										onClick={handlePlayPauseClick}
 										style={{
 											color: 'white',
-											backgroundColor: !isPlaying ? 'rgba(255, 255, 255, 0.2)' : 'transparent',
-											boxShadow: !isPlaying ? '0 0 20px rgba(19, 124, 189, 0.8), 0 0 40px rgba(19, 124, 189, 0.6)' : 'none',
+											backgroundColor: !isPlaying
+												? 'rgba(255, 255, 255, 0.2)'
+												: 'transparent',
+											boxShadow: !isPlaying
+												? '0 0 20px rgba(19, 124, 189, 0.8), 0 0 40px rgba(19, 124, 189, 0.6)'
+												: 'none',
 											transition: 'all 0.3s ease-in-out',
 											border: 'none',
 											outline: 'none',
@@ -166,11 +179,24 @@ function PlayerControlPanel(props: PlayerControlPanelProps) {
 											minWidth: '120px',
 											maxWidth: '120px',
 										}}
-										className={!isPlaying ? 'play-pause-button play-pause-button-glow' : 'play-pause-button'}
+										className={
+											!isPlaying
+												? 'play-pause-button play-pause-button-glow'
+												: 'play-pause-button'
+										}
 									>
-										<span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+										<span
+											style={{
+												display: 'flex',
+												alignItems: 'center',
+												gap: '6px',
+											}}
+										>
 											<Icon icon={isPlaying ? 'pause' : 'play'} color="white" />
-											<Text className="bp3-text-large play-pause-text" style={{ color: 'white' }}>
+											<Text
+												className="bp3-text-large play-pause-text"
+												style={{ color: 'white' }}
+											>
 												{isPlaying ? t('Pause') : t('Play')}
 											</Text>
 										</span>
@@ -281,6 +307,9 @@ function PlayerControlPanel(props: PlayerControlPanelProps) {
 										marginBottom: '12px',
 									}}
 								/>
+								<Button icon="log-out" onClick={handleDisconnect}>
+									{t('Disconnect')}
+								</Button>
 							</Col>
 						</Row>
 					</Col>

@@ -1,5 +1,6 @@
 import getDesktopSourceStreamBySourceID from './getDesktopSourceStreamBySourceID';
 import DesktopCapturerSourceType from '../../../../common/DesktopCapturerSourceType';
+import { IpcEvents } from '../../../../common/IpcEvents.enum';
 
 export default async function createDesktopCapturerStream(
 	peerConnection: PeerConnection,
@@ -7,6 +8,9 @@ export default async function createDesktopCapturerStream(
 ): Promise<void> {
 	try {
 		if (process.env.RUN_MODE === 'test') return;
+		peerConnection.streamSettings = await window.electron.ipcRenderer.invoke(
+			IpcEvents.GetStreamSettings,
+		);
 
 		if (sourceID.includes(DesktopCapturerSourceType.SCREEN)) {
 			const stream = await getDesktopSourceStreamBySourceID(

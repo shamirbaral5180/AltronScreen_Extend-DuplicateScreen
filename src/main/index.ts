@@ -203,6 +203,7 @@ export default class AltronScreenApp {
 		let displaysCleanedUp = false;
 		let displayCleanupStarted = false;
 		app.on('before-quit', (event) => {
+			getAltronScreenGlobal().lanDiscoveryService.stop();
 			if (displaysCleanedUp) return;
 			event.preventDefault();
 			if (displayCleanupStarted) return;

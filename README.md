@@ -24,6 +24,19 @@ same source or different sources; disconnecting one does not stop the others.
 Concurrent approval requests are queued. Up to 16 active or pending viewer
 sessions are supported; practical performance depends on the host and network.
 
+When a viewer disconnects (or is disconnected by the host), it returns to a home
+screen that lists nearby AltronScreen computers. Click a computer to send a new
+access request that the host can Allow or Deny. Discovery uses local-network
+broadcasts; if those are blocked, enter the sharing computer URL manually.
+
+## Streaming settings
+
+The host's Settings include streaming preferences: a preset plus frame rate,
+resolution, bitrate, latency, and content preference. Saved values apply to new
+connections, and saving updates active viewers live. These are capture and
+bitrate limits rather than guaranteed speeds; actual latency depends on the
+network and hardware.
+
 AltronScreen is an `electron.js` based application that uses `WebRTC` to make a live stream of your computer screen to a web browser on any device. It is available for MacOS, Windows and Linux operating systems.
 
 ---

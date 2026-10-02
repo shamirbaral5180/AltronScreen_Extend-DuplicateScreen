@@ -26,8 +26,28 @@ import { checkScreenRecordingPermission } from './checkScreenRecordingPermission
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
+import { validateStreamSettings } from '../../common/StreamSettings';
+import { getStreamSettings, STREAM_SETTINGS_KEY } from './streamSettings';
 
 export const initIpcMainHandlers = (mainWindow: BrowserWindow): void => {
+	ipcMain.handle(IpcEvents.GetStreamSettings, getStreamSettings);
+	ipcMain.handle(IpcEvents.SetStreamSettings, async (_, value: unknown) => {
+		const settings = validateStreamSettings(value);
+		store.set(STREAM_SETTINGS_KEY, JSON.stringify(settings));
+		const sessions = [
+			...getAltronScreenGlobal().sharingSessionService.sharingSessions.values(),
+		].filter((session) => session.desktopCapturerSourceID);
+		const results = await Promise.allSettled(
+			sessions.map((session) => session.updateStreamSettings(settings)),
+		);
+		return {
+			settings,
+			updated: results.filter((result) => result.status === 'fulfilled').length,
+			warnings: results
+				.filter((result) => result.status === 'rejected')
+				.map((result) => String((result as PromiseRejectedResult).reason)),
+		};
+	});
 	ipcMain.on('client-changed-language', async (_, newLangCode) => {
 		i18n.changeLanguage(newLangCode);
 		if (store.has(ElectronStoreKeys.AppLanguage)) {

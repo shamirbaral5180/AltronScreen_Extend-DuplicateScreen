@@ -159,6 +159,14 @@ class AltronScreenSignalingServer {
 	init(): void {
 		this.app = new Koa();
 		const router = new Router();
+		router.get('/api/hosts', (ctx) => {
+			ctx.set('Cache-Control', 'no-store');
+			const ip =
+				getAltronScreenGlobal().cliLocalIp || getMyLocalIpV4() || this.hostname;
+			ctx.body = getAltronScreenGlobal().lanDiscoveryService.list(
+				`http://${ip}:${this.port}`,
+			);
+		});
 
 		this.app.use(cors());
 		this.app.use(router.routes());
@@ -207,6 +215,7 @@ class AltronScreenSignalingServer {
 	async start(): Promise<http.Server> {
 		startPollForInactiveRooms();
 		this.server = await this.callListenOnHttpServer();
+		getAltronScreenGlobal().lanDiscoveryService.start(this.port);
 		return this.server;
 	}
 
@@ -280,6 +289,7 @@ class AltronScreenSignalingServer {
 	}
 
 	stop(): void {
+		getAltronScreenGlobal().lanDiscoveryService.stop();
 		this.server.close();
 	}
 

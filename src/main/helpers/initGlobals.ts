@@ -6,6 +6,7 @@ import RoomIDService from '../../server/RoomIDService';
 import DesktopCapturerSources from '../../features/DesktopCapturerSourcesService';
 import DesktopCapturerSourcesService from '../../features/DesktopCapturerSourcesService';
 import VirtualDisplayService from '../../features/VirtualDisplayService';
+import LanDiscoveryService from '../../features/LanDiscoveryService';
 
 export interface AltronScreenGlobal {
 	appPath: string;
@@ -15,6 +16,7 @@ export interface AltronScreenGlobal {
 	sharingSessionService: SharingSessionService;
 	desktopCapturerSourcesService: DesktopCapturerSourcesService;
 	virtualDisplayService: VirtualDisplayService;
+	lanDiscoveryService: LanDiscoveryService;
 	pendingDisplaySourceIds: Map<number, string>;
 	latestAppVersion: string;
 	currentAppVersion: string;
@@ -38,6 +40,7 @@ export const initGlobals = (appPath: string, cliLocalIp?: string) => {
 	altronscreenGlobal.desktopCapturerSourcesService =
 		new DesktopCapturerSources();
 	altronscreenGlobal.virtualDisplayService = new VirtualDisplayService();
+	altronscreenGlobal.lanDiscoveryService = new LanDiscoveryService();
 	altronscreenGlobal.pendingDisplaySourceIds = new Map();
 	altronscreenGlobal.latestAppVersion = '';
 	altronscreenGlobal.currentAppVersion = app.getVersion();

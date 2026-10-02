@@ -1,4 +1,5 @@
 import { IpcEvents } from '../../../../common/IpcEvents.enum';
+import type { StreamSettings } from '../../../../common/StreamSettings';
 
 async function getStreamWithSource(
 	sourceID: string,
@@ -7,6 +8,9 @@ async function getStreamWithSource(
 	maxSizeMultiplier: number,
 	maxFrameRate: number,
 ): Promise<MediaStream> {
+	const settings: StreamSettings = await window.electron.ipcRenderer.invoke(
+		IpcEvents.GetStreamSettings,
+	);
 	// Tell the main process which source to grant for the upcoming
 	// getDisplayMedia() request. This replaces the legacy (removed in modern
 	// Electron) getUserMedia + chromeMediaSource constraints.
@@ -16,20 +20,62 @@ async function getStreamWithSource(
 	);
 
 	const videoConstraints: MediaTrackConstraints = {
-		frameRate: { ideal: maxFrameRate, max: maxFrameRate },
+		frameRate: {
+			ideal: Math.min(maxFrameRate, settings.frameRate),
+			max: Math.min(maxFrameRate, settings.frameRate),
+		},
 	};
 
 	if (width && height) {
-		const targetWidth = Math.round(width * maxSizeMultiplier);
-		const targetHeight = Math.round(height * maxSizeMultiplier);
+		const targetWidth = Math.max(
+			2,
+			Math.round(width * maxSizeMultiplier * settings.resolutionScale),
+		);
+		const targetHeight = Math.max(
+			2,
+			Math.round(height * maxSizeMultiplier * settings.resolutionScale),
+		);
 		videoConstraints.width = { ideal: targetWidth, max: targetWidth };
 		videoConstraints.height = { ideal: targetHeight, max: targetHeight };
 	}
 
-	return navigator.mediaDevices.getDisplayMedia({
+	const stream = await navigator.mediaDevices.getDisplayMedia({
 		audio: false,
 		video: videoConstraints,
 	});
+	const track = stream.getVideoTracks()[0];
+	try {
+		if (
+			(!width || !height) &&
+			settings.resolutionScale * maxSizeMultiplier < 1
+		) {
+			const native = track.getSettings();
+			if (native.width && native.height)
+				await track.applyConstraints({
+					width: {
+						ideal: Math.round(
+							native.width * settings.resolutionScale * maxSizeMultiplier,
+						),
+						max: Math.round(
+							native.width * settings.resolutionScale * maxSizeMultiplier,
+						),
+					},
+					height: {
+						ideal: Math.round(
+							native.height * settings.resolutionScale * maxSizeMultiplier,
+						),
+						max: Math.round(
+							native.height * settings.resolutionScale * maxSizeMultiplier,
+						),
+					},
+				});
+		}
+		track.contentHint = settings.contentHint;
+		return stream;
+	} catch (error) {
+		stream.getTracks().forEach((item) => item.stop());
+		throw error;
+	}
 }
 
 export default async (

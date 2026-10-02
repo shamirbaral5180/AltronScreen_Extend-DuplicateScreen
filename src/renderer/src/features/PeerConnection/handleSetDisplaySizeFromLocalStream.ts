@@ -20,4 +20,9 @@ export default function setDisplaySizeFromLocalStream(
 					.height as number)
 			: 480,
 	};
+	const scale =
+		peerConnection.streamSettings.resolutionScale *
+		peerConnection.qualityMultiplier;
+	peerConnection.sourceDisplaySize.width /= scale;
+	peerConnection.sourceDisplaySize.height /= scale;
 }

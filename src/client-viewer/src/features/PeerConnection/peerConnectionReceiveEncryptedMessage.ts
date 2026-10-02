@@ -12,6 +12,7 @@ export default async (
 		throw new PeerConnectionUserIsNotDefinedError();
 	}
 	const message = await processMessage(payload);
+	if (peerConnection.destroyed) return;
 	// const message = payload as any;
 	if (message.type === 'CALL_USER') {
 		peerConnection.peer?.signal(message.payload.signalData);

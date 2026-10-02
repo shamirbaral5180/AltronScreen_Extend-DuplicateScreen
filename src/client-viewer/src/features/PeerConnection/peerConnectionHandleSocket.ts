@@ -29,7 +29,6 @@ export function getMyIPCallback(
 }
 
 export default (peerConnection: PeerConnection) => {
-	let disconnectCount = 0;
 	let isAllowed = true;
 	const socket = peerConnection.socket;
 	if (!socket) {
@@ -37,17 +36,8 @@ export default (peerConnection: PeerConnection) => {
 	}
 
 	socket.on('disconnect', () => {
-		disconnectCount++;
-		// handle disconnect even when stream is started - stop stream and show error
-		if (peerConnection.isStreamStarted && disconnectCount >= 1) {
-			peerConnection.stopStream();
-			setAndShowErrorDialogMessage(peerConnection, ErrorMessage.DISCONNECTED);
-			return;
-		}
-		// for pre-stream disconnects, wait for sustained disconnection before showing error
-		if (disconnectCount > 6 && isAllowed) {
-			setAndShowErrorDialogMessage(peerConnection, ErrorMessage.DISCONNECTED);
-		}
+		if (peerConnection.destroyed) return;
+		setAndShowErrorDialogMessage(peerConnection, ErrorMessage.DISCONNECTED);
 	});
 
 	socket.on('ROOM_ASSIGNED', (roomId: string) => {

@@ -2,7 +2,6 @@
 import createDesktopCapturerStream from './createDesktopCapturerStream';
 import handlePeerOnData from './handlePeerOnData';
 import NullSimplePeer from './NullSimplePeer';
-import simplePeerHandleSdpTransform from './simplePeerHandleSdpTransform';
 import {
 	STUN_ICE_SERVERS,
 	applyLowLatencySenderParameters,
@@ -48,7 +47,6 @@ export default function handleCreatePeer(
 					// trickle: false,
 					// wrtc: window.api.wrtc,
 					config: { iceServers: STUN_ICE_SERVERS },
-					sdpTransform: simplePeerHandleSdpTransform,
 				});
 				// }
 
@@ -59,12 +57,15 @@ export default function handleCreatePeer(
 					// screen content, so text/scroll updates feel instantaneous.
 					for (const track of peerConnection.localStream.getVideoTracks()) {
 						try {
-							track.contentHint = 'motion';
+							track.contentHint = peerConnection.streamSettings.contentHint;
 						} catch {
 							// contentHint is best-effort and unsupported in some browsers
 						}
 					}
-					applyLowLatencySenderParameters(peerConnection.peer);
+					void applyLowLatencySenderParameters(
+						peerConnection.peer,
+						peerConnection.streamSettings,
+					);
 				}
 
 				peerConnection.peer.on('signal', (data: string) => {
@@ -87,10 +88,16 @@ export default function handleCreatePeer(
 				});
 
 				peerConnection.peer.on('data', (data) => {
-					handlePeerOnData(peerConnection, data);
+					void handlePeerOnData(peerConnection, data).catch((error) =>
+						console.error('Could not apply viewer settings:', error),
+					);
 				});
 				peerConnection.peer.on('connect', () => {
-					applyLowLatencySenderParameters(peerConnection.peer);
+					void peerConnection
+						.applyStreamSettings(peerConnection.streamSettings)
+						.catch((error) =>
+							console.error('Could not configure stream:', error),
+						);
 				});
 
 				// ensure cleanup on peer end/error to prevent dangling helper window

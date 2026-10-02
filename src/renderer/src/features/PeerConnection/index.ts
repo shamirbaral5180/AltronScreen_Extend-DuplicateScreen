@@ -16,6 +16,12 @@ import { Device } from '../../../../common/Device';
 import { LocalPeerUser } from '../../../../common/LocalPeerUser';
 import type { SendEncryptedMessagePayload } from '../../../../common/SendEncryptedMessagePayload';
 import { Socket } from 'socket.io-client';
+import {
+	DEFAULT_STREAM_SETTINGS,
+	validateStreamSettings,
+	type StreamSettings,
+} from '../../../../common/StreamSettings';
+import { applyLowLatencySenderParameters } from './webRtcPeerOptions';
 
 type DisplaySize = { width: number; height: number };
 
@@ -24,6 +30,79 @@ export interface PartnerPeerUser {
 }
 
 export default class PeerConnection {
+	streamSettings: StreamSettings = { ...DEFAULT_STREAM_SETTINGS };
+	qualityMultiplier = 1;
+	private settingsUpdate: Promise<void> = Promise.resolve();
+
+	applyStreamSettings(
+		value: StreamSettings,
+		qualityMultiplier?: number,
+	): Promise<void> {
+		const settings = validateStreamSettings(value);
+		const updating = this.settingsUpdate
+			.catch(() => undefined)
+			.then(async () => {
+				qualityMultiplier ??= this.qualityMultiplier;
+				const track = this.localStream?.getVideoTracks()[0];
+				if (track) {
+					const current = track.getSettings();
+					const previousScale =
+						this.streamSettings.resolutionScale * this.qualityMultiplier;
+					const width =
+						this.sourceDisplaySize?.width ||
+						(current.width ? current.width / previousScale : undefined);
+					const height =
+						this.sourceDisplaySize?.height ||
+						(current.height ? current.height / previousScale : undefined);
+					const constraints: MediaTrackConstraints = {
+						frameRate: { ideal: settings.frameRate, max: settings.frameRate },
+					};
+					if (width && height) {
+						constraints.width = {
+							ideal: Math.max(
+								2,
+								Math.round(
+									width * settings.resolutionScale * qualityMultiplier,
+								),
+							),
+							max: Math.max(
+								2,
+								Math.round(
+									width * settings.resolutionScale * qualityMultiplier,
+								),
+							),
+						};
+						constraints.height = {
+							ideal: Math.max(
+								2,
+								Math.round(
+									height * settings.resolutionScale * qualityMultiplier,
+								),
+							),
+							max: Math.max(
+								2,
+								Math.round(
+									height * settings.resolutionScale * qualityMultiplier,
+								),
+							),
+						};
+					}
+					await track.applyConstraints(constraints);
+					track.contentHint = settings.contentHint;
+				}
+				this.streamSettings = settings;
+				this.qualityMultiplier = qualityMultiplier;
+				if (this.peer !== NullSimplePeer) {
+					await applyLowLatencySenderParameters(this.peer, settings);
+					if (this.peer.connected)
+						this.peer.send(
+							JSON.stringify({ type: 'stream_settings', payload: settings }),
+						);
+				}
+			});
+		this.settingsUpdate = updating;
+		return updating;
+	}
 	sharingSessionID: string;
 	roomID: string;
 	socket: Socket;
@@ -153,7 +232,7 @@ export default class PeerConnection {
 					this.sourceDisplaySize?.width,
 					this.sourceDisplaySize?.height,
 					0.5,
-					1,
+					this.qualityMultiplier,
 				);
 				const newVideoTrack = newStream.getVideoTracks()[0];
 
@@ -197,7 +276,7 @@ export default class PeerConnection {
 						DesktopCapturerSourceType.SCREEN,
 					)
 				) {
-					setDisplaySizeFromLocalStream(this);
+					if (!this.sourceDisplaySize) setDisplaySizeFromLocalStream(this);
 				} else {
 					// clear for window sources
 					this.sourceDisplaySize = undefined;

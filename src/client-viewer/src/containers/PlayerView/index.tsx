@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, useState } from 'react';
 import { OverlayToaster, Position } from '@blueprintjs/core';
 import { useTranslation } from 'react-i18next';
 import VideoJSPlayer from '../../components/VideoJSPlayer';
@@ -11,6 +11,7 @@ import { type VideoQualityType } from '../../features/VideoAutoQualityOptimizer/
 import { togglePlayerFullscreen } from '../../utils/playerFullscreen';
 
 interface PlayerViewProps {
+	onDisconnect: () => void;
 	isWithControls: boolean;
 	setIsWithControls: (_: boolean) => void;
 	handlePlayPause: () => void;
@@ -32,6 +33,7 @@ type IOSVideoElement = HTMLVideoElement & {
 function PlayerView(props: PlayerViewProps) {
 	const { t } = useTranslation();
 	const {
+		onDisconnect,
 		screenSharingSourceType,
 		setIsWithControls,
 		isWithControls,
@@ -46,7 +48,10 @@ function PlayerView(props: PlayerViewProps) {
 	// const player = useRef(null);
 
 	const videoRef = useRef<HTMLVideoElement>(null);
-	const toasterRef = useRef<Awaited<ReturnType<typeof OverlayToaster.create>> | null>(null);
+	const [playerContainer, setPlayerContainer] = useState<HTMLDivElement | null>(null);
+	const toasterRef = useRef<Awaited<
+		ReturnType<typeof OverlayToaster.create>
+	> | null>(null);
 	// no external player ref needed for video.js variant
 
 	useEffect(() => {
@@ -98,12 +103,14 @@ function PlayerView(props: PlayerViewProps) {
 	const handlePlayPauseWithNotification = useCallback(() => {
 		const nextPlaying = !isPlaying;
 		handlePlayPause();
-		
+
 		// show notification after a small delay to ensure state is updated
 		setTimeout(() => {
 			if (toasterRef.current) {
 				toasterRef.current.show({
-					message: nextPlaying ? t('Video stream is playing') : t('Video stream is paused'),
+					message: nextPlaying
+						? t('Video stream is playing')
+						: t('Video stream is paused'),
 					intent: nextPlaying ? 'success' : 'warning',
 					timeout: 2000,
 				});
@@ -140,7 +147,9 @@ function PlayerView(props: PlayerViewProps) {
 					// show warning notification that video stopped and user needs to click play
 					if (toasterRef.current) {
 						toasterRef.current.show({
-							message: t('Video stream paused after exiting fullscreen. Please click Play to continue.'),
+							message: t(
+								'Video stream paused after exiting fullscreen. Please click Play to continue.',
+							),
 							intent: 'warning',
 							timeout: 5000,
 						});
@@ -209,6 +218,7 @@ function PlayerView(props: PlayerViewProps) {
 			}}
 		>
 			<PlayerControlPanel
+				handleDisconnect={onDisconnect}
 				onSwitchChangedCallback={(isEnabled) => setIsWithControls(isEnabled)}
 				isDefaultPlayerTurnedOn={isWithControls}
 				handleClickFullscreen={() => {
@@ -238,6 +248,7 @@ function PlayerView(props: PlayerViewProps) {
 			>
 				<div
 					id={PLAYER_WRAPPER_ID}
+					ref={setPlayerContainer}
 					className="player-wrapper"
 					style={{
 						position: 'relative',
@@ -264,7 +275,7 @@ function PlayerView(props: PlayerViewProps) {
 						<VideoJSPlayer
 							stream={streamUrl}
 							playing={isPlaying}
-							containerEl={document.getElementById(PLAYER_WRAPPER_ID)}
+							containerEl={playerContainer}
 						/>
 					)}
 				</div>

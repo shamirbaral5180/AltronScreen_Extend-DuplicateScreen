@@ -53,6 +53,7 @@ app.whenReady().then(async () => {
         height: mobile ? 844 : 720, webPreferences: { backgroundThrottling: false } });
       if (mobile) viewer.webContents.setUserAgent('Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Mobile Safari/537.36');
       await viewer.loadURL(url);
+      await waitFor(() => viewer.webContents.executeJavaScript("(() => { const link = document.querySelector('[data-testid=connect-current-host]'); if (!link) return false; link.click(); return true; })()"), 'viewer requests connection');
       return viewer;
     };
     const videoState = viewer => viewer.webContents.executeJavaScript(`(() => {

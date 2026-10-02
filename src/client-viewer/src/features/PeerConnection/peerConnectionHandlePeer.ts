@@ -6,6 +6,7 @@ import { VideoQuality } from '../VideoAutoQualityOptimizer/VideoQualityEnum';
 import { ErrorMessage } from '../../components/ErrorDialog/ErrorMessageEnum';
 import PeerConnectionPeerIsNullError from './errors/PeerConnectionPeerIsNullError';
 import { ScreenSharingSource } from './ScreenSharingSourceEnum';
+import applyReceiverSettings from './applyReceiverSettings';
 
 export function getSharingShourceType(peerConnection: PeerConnection) {
 	try {
@@ -20,6 +21,8 @@ export default (peerConnection: PeerConnection) => {
 		throw new PeerConnectionPeerIsNullError();
 	}
 	peerConnection.peer.on('stream', (stream) => {
+		if (peerConnection.destroyed) return;
+		peerConnection.remoteStream = stream;
 		peerConnection.setUrlCallback(stream);
 
 		for (const track of stream.getVideoTracks()) {
@@ -31,6 +34,7 @@ export default (peerConnection: PeerConnection) => {
 		}
 
 		setTimeout(() => {
+			if (peerConnection.destroyed) return;
 			peerConnection.videoAutoQualityOptimizer.setGoodQualityCallback(() => {
 				if (peerConnection.videoQuality === VideoQuality.Q_AUTO) {
 					try {
@@ -54,8 +58,6 @@ export default (peerConnection: PeerConnection) => {
 
 		peerConnection.videoAutoQualityOptimizer.startOptimizationLoop();
 
-		setTimeout(getSharingShourceType, 1000, peerConnection);
-
 		peerConnection.isStreamStarted = true;
 
 		// if any transient error dialog was shown earlier, close it now
@@ -64,6 +66,18 @@ export default (peerConnection: PeerConnection) => {
 			peerConnection.UIHandler.errorDialogMessage = ErrorMessage.UNKNOWN_ERROR;
 		} catch (_) {
 			// ignore
+		}
+	});
+	peerConnection.peer.on('connect', () => {
+		getSharingShourceType(peerConnection);
+		peerConnection.videoQualityChangedCallback();
+	});
+	peerConnection.peer.on('close', () => {
+		if (!peerConnection.destroyed) {
+			peerConnection.destroy();
+			peerConnection.UIHandler.setDialogErrorMessageCallback(
+				ErrorMessage.DISCONNECTED,
+			);
 		}
 	});
 
@@ -79,6 +93,8 @@ export default (peerConnection: PeerConnection) => {
 
 	peerConnection.peer.on('data', (data) => {
 		const dataJSON = JSON.parse(data);
+		if (dataJSON.type === 'stream_settings')
+			applyReceiverSettings(peerConnection, dataJSON.payload);
 
 		if (dataJSON.type === 'screen_sharing_source_type') {
 			peerConnection.screenSharingSourceType = dataJSON.payload.value;

@@ -1,7 +1,6 @@
 import DesktopCapturerSourceType from '../../../../common/DesktopCapturerSourceType';
-import getDesktopSourceStreamBySourceID from './getDesktopSourceStreamBySourceID';
 import prepareDataMessageToSendScreenSourceType from './prepareDataMessageToSendScreenSourceType';
-import NullSimplePeer from './NullSimplePeer';
+import { IpcEvents } from '../../../../common/IpcEvents.enum';
 
 export default async function handlePeerOnData(
 	peerConnection: PeerConnection,
@@ -10,50 +9,18 @@ export default async function handlePeerOnData(
 	const dataJSON = JSON.parse(data);
 
 	if (dataJSON.type === 'set_video_quality') {
-		const maxVideoQualityMultiplier = dataJSON.payload.value;
-		const minVideoQualityMultiplier =
-			maxVideoQualityMultiplier === 1 ? 0.5 : maxVideoQualityMultiplier;
-
+		const multiplier = dataJSON.payload.value;
 		if (
-			!peerConnection.desktopCapturerSourceID.includes(
-				DesktopCapturerSourceType.SCREEN,
-			)
+			typeof multiplier !== 'number' ||
+			!Number.isFinite(multiplier) ||
+			multiplier < 0.25 ||
+			multiplier > 1
 		)
 			return;
-
-		const newStream = await getDesktopSourceStreamBySourceID(
-			peerConnection.desktopCapturerSourceID,
-			peerConnection.sourceDisplaySize?.width,
-			peerConnection.sourceDisplaySize?.height,
-			minVideoQualityMultiplier,
-			maxVideoQualityMultiplier,
-			60,
-			60,
+		const settings = await window.electron.ipcRenderer.invoke(
+			IpcEvents.GetStreamSettings,
 		);
-		const newVideoTrack = newStream.getVideoTracks()[0];
-		const oldStream = peerConnection.localStream;
-		const oldTrack = oldStream?.getVideoTracks()[0];
-
-		if (oldTrack && oldStream && peerConnection.peer !== NullSimplePeer) {
-			await peerConnection.peer.replaceTrack(
-				oldTrack,
-				newVideoTrack,
-				oldStream,
-			);
-			oldStream.removeTrack(oldTrack);
-			oldStream.addTrack(newVideoTrack);
-			// stop only the old track (it's already removed from the stream by replaceTrack)
-			oldTrack.stop();
-			// stop any remaining tracks in the old stream, but don't stop the new track
-			oldStream.getTracks().forEach((track) => {
-				if (track.id !== newVideoTrack.id) {
-					track.stop();
-				}
-			});
-		}
-
-		// update local stream reference to new stream
-		peerConnection.localStream = oldStream ?? newStream;
+		await peerConnection.applyStreamSettings(settings, multiplier);
 	}
 
 	if (dataJSON.type === 'get_sharing_source_type') {

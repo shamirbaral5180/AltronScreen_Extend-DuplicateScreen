@@ -43,5 +43,17 @@
 	"Unpair": "Unpair",
 	"Session ID": "Session ID",
 	"Click to boost video stream if it is lagging": "Click to boost video stream if it is lagging",
-	"re-initiate-connection": "Re-initiate Connection"
+	"re-initiate-connection": "Re-initiate Connection",
+	"This sharing computer": "This sharing computer",
+	"Choose a sharing computer to request access. The host must allow your connection.": "Choose a sharing computer to request access. The host must allow your connection.",
+	"Nearby sharing computers": "Nearby sharing computers",
+	"Host unavailable. You can retry when it is running.": "Host unavailable. You can retry when it is running.",
+	"Request connection": "Request connection",
+	"Nearby computers must run AltronScreen on the same LAN. If broadcasts are blocked, enter their URL below.": "Nearby computers must run AltronScreen on the same LAN. If broadcasts are blocked, enter their URL below.",
+	"Sharing computer URL": "Sharing computer URL",
+	"Connect": "Connect",
+	"Enter a valid sharing computer URL, for example http://192.168.1.10:3131.": "Enter a valid sharing computer URL, for example http://192.168.1.10:3131.",
+	"Disconnect": "Disconnect",
+	"Disconnected. Choose a host below to request a new connection.": "Disconnected. Choose a host below to request a new connection.",
+	"Back to home": "Back to home"
 }
