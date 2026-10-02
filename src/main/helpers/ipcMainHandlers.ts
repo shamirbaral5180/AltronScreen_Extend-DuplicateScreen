@@ -28,6 +28,12 @@ import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { validateStreamSettings } from '../../common/StreamSettings';
 import { getStreamSettings, STREAM_SETTINGS_KEY } from './streamSettings';
+import {
+	getVirtualDisplayResolution,
+	SUPPORTED_VIRTUAL_DISPLAY_RESOLUTIONS,
+	validateVirtualDisplayResolution,
+	VIRTUAL_DISPLAY_RESOLUTION_KEY,
+} from './virtualDisplaySettings';
 
 export const initIpcMainHandlers = (mainWindow: BrowserWindow): void => {
 	ipcMain.handle(IpcEvents.GetStreamSettings, getStreamSettings);
@@ -48,6 +54,23 @@ export const initIpcMainHandlers = (mainWindow: BrowserWindow): void => {
 				.map((result) => String((result as PromiseRejectedResult).reason)),
 		};
 	});
+	ipcMain.handle(
+		IpcEvents.GetVirtualDisplayResolutionOptions,
+		() => SUPPORTED_VIRTUAL_DISPLAY_RESOLUTIONS,
+	);
+	ipcMain.handle(
+		IpcEvents.GetVirtualDisplayResolution,
+		getVirtualDisplayResolution,
+	);
+	ipcMain.handle(
+		IpcEvents.SetVirtualDisplayResolution,
+		async (_, value: unknown) => {
+			const resolution = validateVirtualDisplayResolution(value);
+			store.set(VIRTUAL_DISPLAY_RESOLUTION_KEY, JSON.stringify(resolution));
+			return { ok: true, resolution };
+		},
+	);
+
 	ipcMain.on('client-changed-language', async (_, newLangCode) => {
 		i18n.changeLanguage(newLangCode);
 		if (store.has(ElectronStoreKeys.AppLanguage)) {
@@ -467,14 +490,11 @@ export const initIpcMainHandlers = (mainWindow: BrowserWindow): void => {
 				return { ok: false, reason: 'unsupported-platform' };
 			}
 
-			// Prefer the connecting viewer's own resolution so the extended
-			// desktop matches the device exactly. Fall back to a sensible default.
-			const pendingDevice =
-				altronscreenGlobal.connectedDevicesService.pendingConnectionDevice;
-			const width =
-				request?.width ?? (pendingDevice?.deviceScreenWidth || 1920);
-			const height =
-				request?.height ?? (pendingDevice?.deviceScreenHeight || 1080);
+			// Use the user's saved extended-display resolution (default 1360x768).
+			// It is also offered first to Windows; other modes remain selectable.
+			const saved = getVirtualDisplayResolution();
+			const width = request?.width ?? saved.width;
+			const height = request?.height ?? saved.height;
 
 			const created = await virtualDisplayService.createDisplay({
 				width,
@@ -550,16 +570,22 @@ export const initIpcMainHandlers = (mainWindow: BrowserWindow): void => {
 		const nextCount = (Number.isFinite(currentCount) ? currentCount : 0) + 1;
 		const previousDisplayCount = screen.getAllDisplays().length;
 
-		const pendingDevice =
-			altronscreenGlobal.connectedDevicesService.pendingConnectionDevice;
-		const width = pendingDevice?.deviceScreenWidth || 1920;
-		const height = pendingDevice?.deviceScreenHeight || 1080;
+		const saved = getVirtualDisplayResolution();
+		const width = saved.width;
+		const height = saved.height;
 
-		const ok = await virtualDisplayService.setDisplayCount(nextCount, {
-			width,
-			height,
-			refreshHz: 60,
-		});
+		// This is the deliberate add-screen action, so a device restart is
+		// permitted here to rebuild the monitor stack. Removal and shutdown
+		// never restart the device.
+		const ok = await virtualDisplayService.setDisplayCount(
+			nextCount,
+			{
+				width,
+				height,
+				refreshHz: 60,
+			},
+			{ restartDevice: true },
+		);
 
 		if (!ok) {
 			return {
@@ -600,12 +626,9 @@ export const initIpcMainHandlers = (mainWindow: BrowserWindow): void => {
 				return { ok: false, reason: 'unsupported-platform' };
 			}
 
-			const pendingDevice =
-				altronscreenGlobal.connectedDevicesService.pendingConnectionDevice;
-			const width =
-				request?.width ?? (pendingDevice?.deviceScreenWidth || 1920);
-			const height =
-				request?.height ?? (pendingDevice?.deviceScreenHeight || 1080);
+			const saved = getVirtualDisplayResolution();
+			const width = request?.width ?? saved.width;
+			const height = request?.height ?? saved.height;
 
 			const ok = await virtualDisplayService.setDisplayCount(
 				request?.count ?? 0,
@@ -614,6 +637,7 @@ export const initIpcMainHandlers = (mainWindow: BrowserWindow): void => {
 					height,
 					refreshHz: 60,
 				},
+				{},
 			);
 
 			// Give the OS a moment to register/remove monitors, then refresh.

@@ -204,5 +204,10 @@
 	"Save streaming settings": "Save streaming settings",
 	"Restore defaults": "Restore defaults",
 	"Defaults saved, but some active viewers could not be updated. Reconnect those viewers.": "Defaults saved, but some active viewers could not be updated. Reconnect those viewers.",
-	"Settings saved and applied to active streams.": "Settings saved and applied to active streams."
+	"Settings saved and applied to active streams.": "Settings saved and applied to active streams.",
+	"Extended display": "Extended display",
+	"Choose the default resolution for the virtual extended screen. Other standard sizes remain selectable in Windows Display Settings.": "Choose the default resolution for the virtual extended screen. Other standard sizes remain selectable in Windows Display Settings.",
+	"Extended screen resolution": "Extended screen resolution",
+	"Save extended display resolution": "Save extended display resolution",
+	"Saved. This is the default size of the extended screen. You can still change the resolution from Windows Display Settings while it is active.": "Saved. This is the default size of the extended screen. You can still change the resolution from Windows Display Settings while it is active."
 }

@@ -1,6 +1,9 @@
 export enum IpcEvents {
 	GetStreamSettings = 'get-stream-settings',
 	SetStreamSettings = 'set-stream-settings',
+	GetVirtualDisplayResolution = 'get-virtual-display-resolution',
+	SetVirtualDisplayResolution = 'set-virtual-display-resolution',
+	GetVirtualDisplayResolutionOptions = 'get-virtual-display-resolution-options',
 	CreateWaitingForConnectionSharingSession = 'create-waiting-for-connection-sharing-session',
 	SetPendingConnectionDevice = 'set-pending-connection-device',
 	UnmarkRoomIDAsTaken = 'unmark-room-id-as-taken',

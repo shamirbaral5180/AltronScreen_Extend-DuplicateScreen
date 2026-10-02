@@ -199,19 +199,23 @@ export default class AltronScreenApp {
 		});
 
 		// Remove any virtual monitor created for screen extension so the host
-		// does not keep a phantom display after the app exits.
-		let displaysCleanedUp = false;
+		// does not keep a phantom display after the app exits. Cleanup is
+		// bounded by a short internal timeout and never restarts the display
+		// device, so quitting cannot hang or freeze the desktop. When no virtual
+		// display was activated this returns immediately.
 		let displayCleanupStarted = false;
+		let quitAfterCleanup = false;
 		app.on('before-quit', (event) => {
 			getAltronScreenGlobal().lanDiscoveryService.stop();
-			if (displaysCleanedUp) return;
+			if (quitAfterCleanup) return;
 			event.preventDefault();
 			if (displayCleanupStarted) return;
 			displayCleanupStarted = true;
 			void getAltronScreenGlobal()
 				.virtualDisplayService.destroyDisplaySilently()
+				.catch(() => undefined)
 				.finally(() => {
-					displaysCleanedUp = true;
+					quitAfterCleanup = true;
 					app.quit();
 				});
 		});

@@ -37,7 +37,24 @@ const VDD_CONFIG_CANDIDATES = [
 ];
 
 const COMMAND_TIMEOUT_MS = 4000;
+const SHUTDOWN_TIMEOUT_MS = 1500;
 const execFileAsync = promisify(execFile);
+
+// Resolutions advertised to Windows for the virtual display. The first entry is
+// the default. Writing several entries lets the user change the extended
+// display's resolution from Windows Display Settings without recreating it.
+const DEFAULT_VIRTUAL_DISPLAY_RESOLUTION = { width: 1360, height: 768 };
+const VIRTUAL_DISPLAY_RESOLUTIONS: ReadonlyArray<{
+	width: number;
+	height: number;
+}> = [
+	DEFAULT_VIRTUAL_DISPLAY_RESOLUTION,
+	{ width: 1920, height: 1080 },
+	{ width: 1280, height: 720 },
+	{ width: 2560, height: 1440 },
+	{ width: 3840, height: 2160 },
+];
+export { DEFAULT_VIRTUAL_DISPLAY_RESOLUTION, VIRTUAL_DISPLAY_RESOLUTIONS };
 
 /**
  * Controls a Windows virtual display through the Virtual Display Driver (VDD).
@@ -58,6 +75,10 @@ export default class VirtualDisplayService {
 	log = new Logger(__filename);
 
 	private commandInFlight: Promise<string> | null = null;
+
+	// Tracks whether this session actually activated a virtual monitor, so app
+	// shutdown can skip all display work when nothing was created.
+	private virtualDisplayActive = false;
 
 	isSupported(): VirtualDisplaySupport {
 		if (process.platform !== 'win32') {
@@ -177,6 +198,7 @@ export default class VirtualDisplayService {
 	async setDisplayCount(
 		count: number,
 		request?: VirtualDisplayRequest,
+		options: { restartDevice?: boolean } = {},
 	): Promise<boolean> {
 		if (process.platform !== 'win32') {
 			this.log.debug('setDisplayCount skipped: unsupported platform');
@@ -204,12 +226,22 @@ export default class VirtualDisplayService {
 			);
 			if (/failed|unknown command|error/i.test(response)) return false;
 			if ((await this.getActiveDisplayCount()) !== targetCount) return false;
-			// The shipped VDD pipe reload does not reliably rebuild the monitor stack.
-			await execFileAsync(
-				'pnputil.exe',
-				['/restart-device', '/deviceid', 'Root\\MttVDD'],
-				{ windowsHide: true, timeout: 15000 },
-			);
+			if (targetCount > 0) {
+				this.virtualDisplayActive = true;
+			} else {
+				this.virtualDisplayActive = false;
+			}
+			// Restarting the display device resets the whole display stack and can
+			// freeze a live desktop, so it is opt-in only (the deliberate add-screen
+			// flow). Removal and shutdown never restart the device; the driver's own
+			// SETDISPLAYCOUNT reload is sufficient.
+			if (options.restartDevice) {
+				await execFileAsync(
+					'pnputil.exe',
+					['/restart-device', '/deviceid', 'Root\\MttVDD'],
+					{ windowsHide: true, timeout: 15000 },
+				);
+			}
 			if (targetCount > 0) {
 				await execFileAsync('DisplaySwitch.exe', ['/extend'], {
 					windowsHide: true,
@@ -226,9 +258,8 @@ export default class VirtualDisplayService {
 	}
 
 	/**
-	 * Remove all virtual monitors. Safe to call repeatedly; always sends
-	 * SETDISPLAYCOUNT 0 so no phantom monitor is left behind, even if the
-	 * count query itself fails.
+	 * Remove all virtual monitors without restarting the display device. Safe to
+	 * call repeatedly; sends SETDISPLAYCOUNT 0 so no phantom monitor remains.
 	 */
 	async destroyDisplay(): Promise<boolean> {
 		if (process.platform !== 'win32') {
@@ -239,15 +270,35 @@ export default class VirtualDisplayService {
 	}
 
 	/**
-	 * Ensure the driver returns to its original state on app shutdown so no
-	 * phantom monitor is left behind.
+	 * Best-effort cleanup on app shutdown. Does nothing when this session never
+	 * activated a virtual monitor, and is bounded by a short timeout so quitting
+	 * can never hang the desktop. Removal uses the soft (no device restart) path.
 	 */
 	async destroyDisplaySilently(): Promise<void> {
-		try {
-			await this.destroyDisplay();
-		} catch {
-			// intentionally swallowed: best-effort cleanup on shutdown
+		if (process.platform !== 'win32') {
+			return;
 		}
+		if (!this.virtualDisplayActive) {
+			// The flag lives in memory only, so a display left active by an
+			// earlier session would be missed. A quick local file read recovers
+			// that case without touching the display device.
+			try {
+				if ((await this.getActiveDisplayCount()) <= 0) return;
+			} catch {
+				return;
+			}
+		}
+		await Promise.race([
+			this.destroyDisplay(),
+			new Promise<void>((resolve) =>
+				setTimeout(resolve, SHUTDOWN_TIMEOUT_MS).unref?.(),
+			),
+		]).catch(() => undefined);
+		this.virtualDisplayActive = false;
+	}
+
+	isActive(): boolean {
+		return this.virtualDisplayActive;
 	}
 
 	private clampDimension(
@@ -303,10 +354,37 @@ export default class VirtualDisplayService {
 		}
 	}
 
+	/**
+	 * Build the driver settings file. Several resolutions are advertised so the
+	 * user can change the extended display's resolution from Windows Display
+	 * Settings. The requested resolution is always listed first (and becomes the
+	 * driver's default), followed by a standard set; duplicates are removed.
+	 */
 	private buildSettingsXml(request: VirtualDisplayInfo, count: number): string {
 		const rates = [request.refreshHz, 60, 30]
 			.filter((value, index, arr) => arr.indexOf(value) === index)
 			.map((rate) => `      <g_refresh_rate>${rate}</g_refresh_rate>`)
+			.join('\n');
+
+		const seen = new Set<string>();
+		const resolutions = [
+			{ width: request.width, height: request.height },
+			...VIRTUAL_DISPLAY_RESOLUTIONS,
+		].filter(({ width, height }) => {
+			const key = `${width}x${height}`;
+			if (seen.has(key)) return false;
+			seen.add(key);
+			return true;
+		});
+
+		const resolutionXml = resolutions
+			.map(
+				({ width, height }) => `    <resolution>
+      <width>${width}</width>
+      <height>${height}</height>
+      <refresh_rate>${request.refreshHz}</refresh_rate>
+    </resolution>`,
+			)
 			.join('\n');
 
 		return `<?xml version='1.0' encoding='utf-8'?>
@@ -318,11 +396,7 @@ export default class VirtualDisplayService {
 ${rates}
   </global>
   <resolutions>
-    <resolution>
-      <width>${request.width}</width>
-      <height>${request.height}</height>
-      <refresh_rate>${request.refreshHz}</refresh_rate>
-    </resolution>
+${resolutionXml}
   </resolutions>
 </vdd_settings>
 `;

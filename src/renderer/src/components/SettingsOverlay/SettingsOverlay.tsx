@@ -19,6 +19,7 @@ import { IpcEvents } from '../../../../common/IpcEvents.enum';
 import { useTranslation } from 'react-i18next';
 import './settings-overlay.css';
 import StreamingSettingsPanel from './StreamingSettingsPanel';
+import ExtendedDisplaySettingsPanel from './ExtendedDisplaySettingsPanel';
 
 interface SettingsOverlayProps {
 	isSettingsOpen: boolean;
@@ -115,6 +116,7 @@ export default function SettingsOverlay(
 					/>
 				</div>
 				<StreamingSettingsPanel />
+				<ExtendedDisplaySettingsPanel />
 
 				<Row
 					center="xs"

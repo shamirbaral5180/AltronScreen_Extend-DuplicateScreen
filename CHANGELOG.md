@@ -1,3 +1,15 @@
+# 1.3.0
+
+- Fixed a freeze that could require a PC restart when closing the app. Closing
+  no longer restarts the display device and never blocks quitting; cleanup is
+  bounded and skipped when no extended screen was created.
+- The extended (virtual) display now advertises several resolutions, so its
+  resolution can be changed in Windows Display Settings without recreating it.
+- Added the default extended-screen resolution of 1360x768, and a Settings
+  option to choose the default resolution (Windows can still change it live).
+- Removing the extended screen from Settings uses a soft reload with no display
+  device restart.
+
 # 1.2.0
 
 - The viewer now opens a home screen with a list of nearby AltronScreen computers instead of the previous error dialog after disconnecting.
