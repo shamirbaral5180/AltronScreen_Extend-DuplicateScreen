@@ -40,8 +40,9 @@ network and hardware.
 Settings also include the extended screen's default resolution (1360x768 by
 default). The virtual display advertises several standard resolutions, so its
 resolution can also be changed live from Windows Display Settings while it is
-active. Closing the app removes the extended screen with a soft reload and does
-not restart the display device, so it does not freeze the PC.
+active. Closing the app stops all captures first and then removes the virtual
+display device, so no leftover extended screen remains and the PC does not
+freeze. The device is recreated automatically the next time a screen is added.
 
 AltronScreen is an `electron.js` based application that uses `WebRTC` to make a live stream of your computer screen to a web browser on any device. It is available for MacOS, Windows and Linux operating systems.
 

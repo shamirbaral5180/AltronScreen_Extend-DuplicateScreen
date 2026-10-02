@@ -2,7 +2,7 @@ import net from 'node:net';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { spawnSync, execFile } from 'node:child_process';
+import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import Logger from '../../main/utils/LoggerWithFilePrefix';
 
@@ -37,7 +37,10 @@ const VDD_CONFIG_CANDIDATES = [
 ];
 
 const COMMAND_TIMEOUT_MS = 4000;
-const SHUTDOWN_TIMEOUT_MS = 1500;
+// Applying the topology change requires cycling the display device, which can
+// take several seconds. Cleanup runs only after captures have stopped, so this
+// cycle is safe; the timeout is the upper bound before we stop waiting.
+const SHUTDOWN_TIMEOUT_MS = 15000;
 const execFileAsync = promisify(execFile);
 
 // Resolutions advertised to Windows for the virtual display. The first entry is
@@ -80,6 +83,9 @@ export default class VirtualDisplayService {
 	// shutdown can skip all display work when nothing was created.
 	private virtualDisplayActive = false;
 
+	// Number of displays present before the app created any virtual display.
+	private physicalDisplayBaseline: number | null = null;
+
 	isSupported(): VirtualDisplaySupport {
 		if (process.platform !== 'win32') {
 			return {
@@ -90,6 +96,8 @@ export default class VirtualDisplayService {
 			};
 		}
 
+		// Fast path only (pipe check). Callers that need a thorough check should
+		// await isDriverInstalled(), which may run pnputil without blocking.
 		const driverInstalled = this.isDriverInstalledSync();
 
 		return {
@@ -110,6 +118,13 @@ export default class VirtualDisplayService {
 	 * be present; reporting "not installed" then lets the app recreate the
 	 * device instead of silently failing.
 	 */
+	/**
+	 * Fast, non-blocking check that the driver *package* is available. The
+	 * device is intentionally removed on shutdown (the driver has no
+	 * zero-monitor mode), so the device/pipe cannot be used as the "installed"
+	 * signal — that would make the app re-download on every launch. The UMDF DLL
+	 * and the named pipe both persist across device removal.
+	 */
 	isDriverInstalledSync(): boolean {
 		if (process.platform !== 'win32') {
 			return false;
@@ -123,21 +138,42 @@ export default class VirtualDisplayService {
 			// fall through
 		}
 
-		return this.isRootDevicePresentSync();
+		const umdfDriverDll = path.join(
+			process.env.SystemRoot ?? 'C:\\Windows',
+			'System32',
+			'drivers',
+			'UMDF',
+			'MttVDD.dll',
+		);
+		try {
+			return fs.existsSync(umdfDriverDll);
+		} catch {
+			return false;
+		}
 	}
 
-	private isRootDevicePresentSync(): boolean {
+	/**
+	 * Authoritative, non-blocking check that the driver package is installed and
+	 * the device can be (re)created. Uses the pipe/DLL for a fast positive and
+	 * falls back to enumerating the installed driver packages (device removal
+	 * keeps the package, so this prevents a needless re-download).
+	 */
+	async isDriverInstalled(): Promise<boolean> {
 		if (process.platform !== 'win32') {
 			return false;
 		}
+
+		if (this.isDriverInstalledSync()) {
+			return true;
+		}
+
 		try {
-			const result = spawnSync(
+			const { stdout, stderr } = await execFileAsync(
 				'pnputil.exe',
-				['/enum-devices', '/connected', '/deviceids'],
+				['/enum-drivers'],
 				{ encoding: 'utf8', windowsHide: true, timeout: 10000 },
 			);
-			const output = `${result.stdout ?? ''}${result.stderr ?? ''}`;
-			return /Root\\MttVDD/i.test(output);
+			return /mttvdd\.inf/i.test(`${stdout ?? ''}${stderr ?? ''}`);
 		} catch {
 			return false;
 		}
@@ -191,36 +227,33 @@ export default class VirtualDisplayService {
 
 		const targetCount = Math.max(0, Math.min(16, Math.round(count)));
 
-		if (request) {
-			const width = this.clampDimension(request.width, 640, 7680);
-			const height = this.clampDimension(request.height, 480, 4320);
-			const refreshHz = this.clampDimension(request.refreshHz ?? 60, 24, 360);
-			await this.writeSettingsFile({ width, height, refreshHz });
-		}
+		// The driver reads the desired monitor count from vdd_settings.xml, and a
+		// count of 0 is clamped to 1 (there is no zero-monitor mode). So the XML
+		// count plus the presence of the root device fully determine the monitor
+		// state: count>0 => device present, count==0 => device removed.
+		const width = this.clampDimension(request?.width ?? 1360, 640, 7680);
+		const height = this.clampDimension(request?.height ?? 768, 480, 4320);
+		const refreshHz = this.clampDimension(request?.refreshHz ?? 60, 24, 360);
+		await this.writeSettingsFile({ width, height, refreshHz }, targetCount);
 
 		try {
-			const response = await this.sendCommand(
-				`SETDISPLAYCOUNT ${targetCount}`,
-				{
-					allowReload: true,
-				},
-			);
-			this.log.debug(
-				`VDD SETDISPLAYCOUNT ${targetCount} response: ${response}`,
-			);
-			if (/failed|unknown command|error/i.test(response)) return false;
-			if ((await this.getActiveDisplayCount()) !== targetCount) return false;
+			// Best-effort: nudge the running driver to reload (applies instantly
+			// when the pipe is present). Ignored when the device is absent.
+			await this.sendCommand(`SETDISPLAYCOUNT ${targetCount}`, {
+				allowReload: true,
+			}).catch(() => '');
+
+			// Apply the topology. This MUST NOT run while WebRTC captures are
+			// active (that deadlocks the display stack and freezes the desktop),
+			// so callers must stop captures first.
+			await this.applyDisplayTopology(targetCount);
 			this.virtualDisplayActive = targetCount > 0;
-			// The driver's own SETDISPLAYCOUNT reload rebuilds the monitor stack.
-			// We deliberately never call `pnputil /restart-device`: restarting the
-			// display device resets the whole display stack (freezing a live
-			// desktop) and can even remove the root device. Extend mode is only a
-			// projection change, which is safe.
+
 			if (targetCount > 0) {
 				await execFileAsync('DisplaySwitch.exe', ['/extend'], {
 					windowsHide: true,
 					timeout: 15000,
-				});
+				}).catch(() => undefined);
 			}
 			return true;
 		} catch (error) {
@@ -232,35 +265,140 @@ export default class VirtualDisplayService {
 	}
 
 	/**
-	 * Remove all virtual monitors without restarting the display device. Safe to
-	 * call repeatedly; sends SETDISPLAYCOUNT 0 so no phantom monitor remains.
+	 * Recreate the root display device so the virtual monitor appears. The
+	 * driver has no "zero monitors" mode: its settings parser clamps a count of
+	 * 0 to 1, so the monitor only exists while the device exists. Recreating the
+	 * device is therefore the way to add it back after removal.
+	 *
+	 * Safe only when no desktop capture is running; callers must stop captures
+	 * first.
+	 */
+	private async applyDisplayTopology(targetCount: number): Promise<void> {
+		if (process.platform !== 'win32') return;
+		// count 0 means "no virtual monitor": remove the root device entirely
+		// (the driver clamps a count of 0 to 1, so the device must go away).
+		if (targetCount <= 0) {
+			if (await this.isRootDevicePresent()) {
+				try {
+					await execFileAsync(
+						'pnputil.exe',
+						['/remove-device', '/deviceid', 'Root\\MttVDD'],
+						{ windowsHide: true, timeout: 30000 },
+					);
+				} catch (error) {
+					this.log.warn(`remove-device failed: ${String(error)}`);
+				}
+			}
+		} else if (await this.isRootDevicePresent()) {
+			// Device exists: a restart applies the new count/resolution.
+			try {
+				await execFileAsync(
+					'pnputil.exe',
+					['/restart-device', '/deviceid', 'Root\\MttVDD'],
+					{ windowsHide: true, timeout: 30000 },
+				);
+			} catch (error) {
+				this.log.warn(`restart-device failed: ${String(error)}`);
+			}
+		} else {
+			// Device absent: recreate it from the installed package.
+			await this.recreateRootDevice();
+		}
+		// Allow the display stack a moment to settle before captures start.
+		await new Promise((resolve) => setTimeout(resolve, 1500));
+	}
+
+	private async isRootDevicePresent(): Promise<boolean> {
+		try {
+			const { stdout, stderr } = await execFileAsync(
+				'pnputil.exe',
+				['/enum-devices', '/connected', '/deviceids'],
+				{ encoding: 'utf8', windowsHide: true, timeout: 10000 },
+			);
+			return /Root\\MttVDD/i.test(`${stdout ?? ''}${stderr ?? ''}`);
+		} catch {
+			return false;
+		}
+	}
+
+	/**
+	 * Create the root device from the cached, previously-extracted driver
+	 * package without downloading it again. Falls back to a full install when no
+	 * cache is available.
+	 */
+	private async recreateRootDevice(): Promise<void> {
+		const workDir = path.join(os.tmpdir(), 'AltronScreenVDD', 'extracted');
+		const arch = /arm/i.test(process.env.PROCESSOR_ARCHITECTURE ?? '')
+			? 'ARM64'
+			: 'x86';
+		const driverDir = path.join(workDir, 'SignedDrivers', arch, 'VDD');
+		const inf = path.join(driverDir, 'MttVDD.inf');
+		const devcon = fs.existsSync(
+			path.join(workDir, 'Dependencies', 'devcon.exe'),
+		)
+			? path.join(workDir, 'Dependencies', 'devcon.exe')
+			: path.join(driverDir, 'devcon.exe');
+
+		if (!fs.existsSync(inf) || !fs.existsSync(devcon)) {
+			// No cache: run the full installer (downloads the package and creates
+			// the device). Imported lazily to avoid a cycle.
+			const { installVirtualDisplayDriverSync } = await import(
+				'../../main/helpers/ipcMainHandlers'
+			);
+			const appPath = (global as unknown as { appPath?: string }).appPath ?? '';
+			await installVirtualDisplayDriverSync(appPath);
+			return;
+		}
+
+		await execFileAsync(devcon, ['install', inf, 'Root\\MttVDD'], {
+			windowsHide: true,
+			timeout: 60000,
+		});
+	}
+
+	/**
+	 * Remove the virtual monitor. The driver has no zero-monitor mode (a count
+	 * of 0 is clamped to 1), so the only reliable way to remove it is to remove
+	 * the root display device. It is recreated on demand via
+	 * `applyDisplayTopology()`. Must be called after captures have stopped.
 	 */
 	async destroyDisplay(): Promise<boolean> {
 		if (process.platform !== 'win32') {
 			return false;
 		}
 
-		return this.setDisplayCount(0);
+		if (!(await this.isRootDevicePresent())) {
+			this.virtualDisplayActive = false;
+			return true;
+		}
+
+		try {
+			await execFileAsync(
+				'pnputil.exe',
+				['/remove-device', '/deviceid', 'Root\\MttVDD'],
+				{ windowsHide: true, timeout: 30000 },
+			);
+			this.virtualDisplayActive = false;
+			// Give Windows a moment to retire the monitor.
+			await new Promise((resolve) => setTimeout(resolve, 1500));
+			return true;
+		} catch (error) {
+			this.log.error(`VDD remove-device failed: ${String(error)}`);
+			return false;
+		}
 	}
 
 	/**
-	 * Best-effort cleanup on app shutdown. Does nothing when this session never
-	 * activated a virtual monitor, and is bounded by a short timeout so quitting
-	 * can never hang the desktop. Removal uses the soft (no device restart) path.
+	 * Best-effort cleanup on app shutdown. Callers must have stopped all
+	 * captures first. Bounded by a timeout so quitting cannot hang forever, and
+	 * skipped when the driver is not present.
 	 */
 	async destroyDisplaySilently(): Promise<void> {
 		if (process.platform !== 'win32') {
 			return;
 		}
-		if (!this.virtualDisplayActive) {
-			// The flag lives in memory only, so a display left active by an
-			// earlier session would be missed. A quick local file read recovers
-			// that case without touching the display device.
-			try {
-				if ((await this.getActiveDisplayCount()) <= 0) return;
-			} catch {
-				return;
-			}
+		if (!(await this.isDriverInstalled())) {
+			return;
 		}
 		await Promise.race([
 			this.destroyDisplay(),
@@ -269,6 +407,30 @@ export default class VirtualDisplayService {
 			),
 		]).catch(() => undefined);
 		this.virtualDisplayActive = false;
+	}
+
+	/**
+	 * Record the number of displays present before any virtual display is
+	 * created, as a secondary signal for shutdown cleanup.
+	 */
+	setPhysicalDisplayBaseline(count: number): void {
+		this.physicalDisplayBaseline = count;
+	}
+
+	/**
+	 * Whether a virtual monitor is currently active. Prefers the concrete signal
+	 * (the root device is present / the monitor count rose above the baseline),
+	 * so a lingering monitor left by a previous session is still cleaned up.
+	 */
+	async hasActiveVirtualDisplay(currentDisplayCount: number): Promise<boolean> {
+		if (this.virtualDisplayActive) return true;
+		if (
+			this.physicalDisplayBaseline !== null &&
+			currentDisplayCount > this.physicalDisplayBaseline
+		) {
+			return true;
+		}
+		return this.isRootDevicePresent();
 	}
 
 	isActive(): boolean {
@@ -307,13 +469,15 @@ export default class VirtualDisplayService {
 		return VDD_CONFIG_CANDIDATES[0];
 	}
 
-	private async writeSettingsFile(request: VirtualDisplayInfo): Promise<void> {
+	private async writeSettingsFile(
+		request: VirtualDisplayInfo,
+		count: number,
+	): Promise<void> {
 		const configPath = this.resolveConfigPath();
 		if (!configPath) {
 			return;
 		}
 
-		const count = await this.getActiveDisplayCount();
 		const xml = this.buildSettingsXml(request, count);
 
 		try {

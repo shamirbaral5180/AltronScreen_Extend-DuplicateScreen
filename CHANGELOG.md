@@ -1,3 +1,17 @@
+# 1.4.0
+
+- Fixed the extended screen not being removed on close: the app now removes the
+  virtual display device, since the driver has no zero-monitor mode (a count of
+  "0" is internally treated as 1). The device is recreated on demand when a
+  screen is added again.
+- The virtual display is now removed reliably on close while captures are
+  stopped first, so no leftover "Screen 2" remains and the PC does not freeze.
+- Faster startup: the window is shown as soon as it is ready, and the signaling
+  server, LAN discovery, and driver checks now run in the background instead of
+  blocking the first paint. The UI appears in well under a second.
+- The startup driver check uses the installed driver package (not the device),
+  so no re-download is triggered after the device is removed on close.
+
 # 1.3.0
 
 - Fixed a freeze that could require a PC restart when closing the app, especially

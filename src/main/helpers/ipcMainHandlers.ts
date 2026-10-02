@@ -468,8 +468,19 @@ export const initIpcMainHandlers = (mainWindow: BrowserWindow): void => {
 		await sharingSession.setDesktopCapturerSourceID(id);
 	});
 
-	ipcMain.handle(IpcEvents.GetVirtualDisplaySupport, () => {
-		return getAltronScreenGlobal().virtualDisplayService.isSupported();
+	ipcMain.handle(IpcEvents.GetVirtualDisplaySupport, async () => {
+		const service = getAltronScreenGlobal().virtualDisplayService;
+		const support = service.isSupported();
+		if (support.supported && !support.driverInstalled) {
+			// Thorough async check (may run pnputil) so the UI knows the real state.
+			const installed = await service.isDriverInstalled();
+			return {
+				...support,
+				driverInstalled: installed,
+				reason: installed ? undefined : support.reason,
+			};
+		}
+		return support;
 	});
 
 	ipcMain.handle(
@@ -536,9 +547,9 @@ export const initIpcMainHandlers = (mainWindow: BrowserWindow): void => {
 			return { ok: false, reason: 'unsupported-platform' };
 		}
 
-		// If the driver is not installed yet, install it synchronously so we can
-		// report the real result back to the UI.
-		if (!virtualDisplayService.isSupported().driverInstalled) {
+		// If the driver is not installed yet, install it (awaiting the real
+		// result) so we can report it back to the UI.
+		if (!(await virtualDisplayService.isDriverInstalled())) {
 			const installResult = await installVirtualDisplayDriverSync(
 				altronscreenGlobal.appPath,
 			);

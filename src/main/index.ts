@@ -12,21 +12,29 @@ import {
 	BrowserWindow,
 	session,
 	desktopCapturer,
+	screen,
 	webContents,
 } from 'electron';
 import { join } from 'path';
 import { is, optimizer } from '@electron-toolkit/utils';
 import icon from '../../resources/icon.png?asset';
 import { existsSync } from 'node:fs';
-import { execSync } from 'node:child_process';
+import { execSync, execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 
-const isProcessElevated = (): boolean => {
+const execFileAsync = promisify(execFile);
+
+/**
+ * Asynchronous elevation check. Uses `net session`, which succeeds only when
+ * the process has administrator rights. Kept async so startup never blocks the
+ * main thread (and therefore the first UI paint) while it runs.
+ */
+const isProcessElevated = async (): Promise<boolean> => {
 	if (process.platform !== 'win32') {
 		return true;
 	}
 	try {
-		// `net session` succeeds only when the process has admin rights.
-		execSync('net session', { stdio: 'ignore' });
+		await execFileAsync('net', ['session'], { windowsHide: true });
 		return true;
 	} catch {
 		return false;
@@ -186,12 +194,21 @@ export default class AltronScreenApp {
 
 			this.setupDisplayMediaHandler();
 
-			// Ensure the virtual display driver is available for the Extended
-			// Screen feature. On Windows this downloads and launches the official
-			// VDD installer (elevated) if the driver is not yet installed.
-			void this.ensureVirtualDisplayDriver();
+			// Record the physical display count before any virtual display is
+			// created, so shutdown can reliably detect a lingering monitor even
+			// when the driver's XML count says 0.
+			const global = getAltronScreenGlobal();
+			global.virtualDisplayService.setPhysicalDisplayBaseline(
+				screen.getAllDisplays().length,
+			);
 
+			// Create and show the window first so the UI appears immediately.
 			await this.createWindow();
+
+			// Then run everything else in the background. None of this blocks the
+			// first paint: the driver check uses synchronous OS queries internally,
+			// so it must never run before the window is visible.
+			this.startBackgroundTasks();
 		});
 
 		app.on('browser-window-created', (_, window) => {
@@ -199,10 +216,13 @@ export default class AltronScreenApp {
 		});
 
 		// Remove any virtual monitor created for screen extension so the host
-		// does not keep a phantom display after the app exits. Cleanup is
-		// bounded by a short internal timeout and never restarts the display
-		// device, so quitting cannot hang or freeze the desktop. When no virtual
-		// display was activated this returns immediately.
+		// does not keep a phantom monitor after the app exits.
+		//
+		// Order is critical: a display device cycle is required to actually
+		// remove the monitor, but cycling while WebRTC captures are active
+		// deadlocks the display stack and freezes the desktop. So we stop every
+		// capture first, wait for the duplication handles to release, then apply
+		// the removal. When no virtual monitor was activated, this returns fast.
 		let displayCleanupStarted = false;
 		let quitAfterCleanup = false;
 		app.on('before-quit', (event) => {
@@ -213,14 +233,14 @@ export default class AltronScreenApp {
 			if (displayCleanupStarted) return;
 			displayCleanupStarted = true;
 			void (async () => {
-				// Order matters: stop all live captures first (closing the WebRTC
-				// helper renderers releases the desktop-duplication handles), then
-				// give the OS a moment, and only then remove the virtual displays.
-				// Removing a display while it is still being captured can deadlock
-				// the display stack and freeze the PC.
+				const service = global.virtualDisplayService;
+				const hasVirtual = await service.hasActiveVirtualDisplay(
+					screen.getAllDisplays().length,
+				);
 				global.rendererWebrtcHelpersService.closeAll();
-				await new Promise((resolve) => setTimeout(resolve, 500));
-				await global.virtualDisplayService.destroyDisplaySilently();
+				if (!hasVirtual) return;
+				await new Promise((resolve) => setTimeout(resolve, 800));
+				await service.destroyDisplaySilently();
 			})()
 				.catch(() => undefined)
 				.finally(() => {
@@ -303,9 +323,29 @@ export default class AltronScreenApp {
 	}
 
 	/**
+	 * Run startup work that is not needed for the first paint. Kept off the
+	 * critical path so the UI shows immediately; each step is independent and
+	 * failures are logged without blocking.
+	 */
+	private startBackgroundTasks(): void {
+		// Start the LAN signaling server once the UI is up. It binds a socket
+		// and reads local storage, so it must not run before the first paint.
+		void signalingServer.start().catch((error) => {
+			console.error('failed to start signaling server', error);
+		});
+
+		// Virtual display driver availability (Windows only). The internal check
+		// runs synchronous OS queries, so it is deferred until after the window
+		// is visible.
+		setTimeout(() => {
+			void this.ensureVirtualDisplayDriver();
+		}, 0).unref?.();
+	}
+
+	/**
 	 * Check whether the virtual display driver is installed; if not, launch the
-	 * bundled installer (elevated) so the driver downloads and installs at app
-	 * startup rather than when the user first clicks "Extend Screen".
+	 * bundled installer (elevated) so the driver downloads and installs in the
+	 * background rather than when the user first clicks "Extend Screen".
 	 */
 	private async ensureVirtualDisplayDriver(): Promise<void> {
 		if (process.platform !== 'win32') {
@@ -318,8 +358,9 @@ export default class AltronScreenApp {
 		}
 
 		try {
-			const support = virtualDisplayService.isSupported();
-			if (support.driverInstalled) {
+			// Async check keeps the main thread free while pnputil runs.
+			const installed = await virtualDisplayService.isDriverInstalled();
+			if (installed) {
 				return;
 			}
 
@@ -343,6 +384,7 @@ export default class AltronScreenApp {
 
 		this.mainWindow = new BrowserWindow({
 			show: false,
+			backgroundColor: '#ffffff',
 			width: 940,
 			height: 640,
 			minHeight: 460,
@@ -362,21 +404,20 @@ export default class AltronScreenApp {
 
 		// this.mainWindow.loadURL(`file://${__dirname}/app.html`);
 
-		// @TODO: Use 'ready-to-show' event
-		//        https://github.com/electron/electron/blob/master/docs/api/browser-window.md#using-ready-to-show-event
-		this.mainWindow.on('ready-to-show', () => {
-			// this.mainWindow.webContents.on('did-finish-load', () => {
-			if (!this.mainWindow) {
-				throw new Error('"mainWindow" is not defined');
-			}
+		// Show the window as soon as the first paint is ready. A short fallback
+		// also shows it if ready-to-show is delayed, so a slow background task
+		// can never keep the UI hidden.
+		const showWindow = (): void => {
+			if (!this.mainWindow || this.mainWindow.isDestroyed()) return;
 			if (process.env.START_MINIMIZED === 'true') {
 				this.mainWindow.minimize();
 			} else {
 				this.mainWindow.show();
 				this.mainWindow.focus();
 			}
-			// });
-		});
+		};
+		this.mainWindow.once('ready-to-show', showWindow);
+		setTimeout(showWindow, 1200).unref?.();
 
 		this.mainWindow.webContents.setWindowOpenHandler((details) => {
 			shell.openExternal(details.url);
@@ -435,35 +476,16 @@ export default class AltronScreenApp {
 	}
 
 	start(): void {
-		// On Windows, request administrator rights at startup so the virtual
-		// display driver can be installed without a separate manual step. The
-		// portable launcher is not always marked requireAdministrator, so we
-		// re-launch ourselves elevated here when needed. Skipped in dev mode.
-		const isDev = !app.isPackaged;
-		const alreadyTriedElevation = process.argv.includes('--elevated');
-		if (
-			process.platform === 'win32' &&
-			!isDev &&
-			!isProcessElevated() &&
-			!alreadyTriedElevation
-		) {
-			const relaunched = relaunchElevated();
-			if (relaunched) {
-				app.quit();
-				return;
-			}
-		}
-
-		// ensure only one instance of the app can run
+		// Single-instance lock is fast and synchronous; do it first so a second
+		// launch cannot create a duplicate window.
 		const gotTheLock = app.requestSingleInstanceLock();
-
 		if (!gotTheLock) {
-			// another instance is already running, quit this one
 			app.quit();
 			return;
 		}
 
-		// handle second instance attempts (e.g., clicking taskbar icon on windows)
+		// Handle second instance attempts (e.g., clicking the taskbar icon on
+		// Windows) before any slower startup work.
 		app.on('second-instance', () => {
 			if (this.mainWindow) {
 				if (this.mainWindow.isMinimized()) {
@@ -476,9 +498,34 @@ export default class AltronScreenApp {
 
 		const cliLocalIp = this.parseCliLocalIp();
 		initGlobals(join(__dirname, '..'), cliLocalIp);
-		signalingServer.start();
 
+		// Build the UI first; start the signaling server in the background once
+		// the app is ready. This keeps the first paint fast.
 		this.initElectronAppObject();
+
+		// On Windows, request administrator rights so the virtual display driver
+		// can be managed. The check is async so it never delays the UI; if
+		// elevation is needed the app relaunches and this instance exits.
+		void this.ensureElevated();
+	}
+
+	/**
+	 * On Windows packaged builds, relaunch elevated when not already elevated.
+	 * Runs off the startup critical path so the window can appear immediately.
+	 */
+	private async ensureElevated(): Promise<void> {
+		if (process.platform !== 'win32' || !app.isPackaged) {
+			return;
+		}
+		if (process.argv.includes('--elevated')) {
+			return;
+		}
+		if (await isProcessElevated()) {
+			return;
+		}
+		if (relaunchElevated()) {
+			app.quit();
+		}
 	}
 
 	private parseCliLocalIp(): string | undefined {
