@@ -1,3 +1,15 @@
+# 1.4.4
+
+- Screen sharing now prefers H.264 and uses the GPU's hardware encoder instead
+  of software VP8/VP9, removing the CPU bottleneck that caused choppy, low-FPS
+  streaming and high latency. Measured on a wired LAN: ~4x the delivered
+  bitrate and a much larger, sharper frame.
+- Raised the bitrate ceiling (default 20 Mbps; presets 8/15/35). WebRTC
+  congestion control still caps to real available bandwidth, so this only uses
+  the extra headroom on fast networks.
+- The hidden capture/encode renderer is no longer throttled by Chromium, so it
+  can encode at the requested frame rate.
+
 # 1.4.3
 
 - Fixed the "Application Window" list sometimes being empty and unselectable:

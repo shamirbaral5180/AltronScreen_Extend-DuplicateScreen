@@ -6,6 +6,7 @@ import {
 	STUN_ICE_SERVERS,
 	applyLowLatencySenderParameters,
 } from './webRtcPeerOptions';
+import applyPreferredVideoCodecs from './videoCodecPreferences';
 
 export default function handleCreatePeer(
 	peerConnection: PeerConnection,
@@ -62,10 +63,15 @@ export default function handleCreatePeer(
 							// contentHint is best-effort and unsupported in some browsers
 						}
 					}
+					// Must run before simple-peer schedules its offer (it negotiates
+					// on a microtask/timeout), so H.264 lands at the front of the SDP.
+					applyPreferredVideoCodecs(peerConnection.peer);
 					void applyLowLatencySenderParameters(
 						peerConnection.peer,
 						peerConnection.streamSettings,
-					);
+					).catch(() => {
+						// Sender parameters are best-effort; re-applied on 'connect'.
+					});
 				}
 
 				peerConnection.peer.on('signal', (data: string) => {

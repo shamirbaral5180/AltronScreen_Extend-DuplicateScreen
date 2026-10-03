@@ -9,7 +9,7 @@ export interface StreamSettings {
 export const DEFAULT_STREAM_SETTINGS: StreamSettings = {
 	frameRate: 60,
 	resolutionScale: 1,
-	bitrateMbps: 5,
+	bitrateMbps: 20,
 	latency: 'interactive',
 	contentHint: 'motion',
 };
@@ -19,22 +19,22 @@ export const STREAM_PRESETS: Record<string, StreamSettings> = {
 	speed: {
 		frameRate: 30,
 		resolutionScale: 0.5,
-		bitrateMbps: 3,
+		bitrateMbps: 8,
 		latency: 'interactive',
 		contentHint: 'motion',
 	},
 	balanced: {
-		frameRate: 30,
+		frameRate: 60,
 		resolutionScale: 0.75,
-		bitrateMbps: 5,
-		latency: 'balanced',
+		bitrateMbps: 15,
+		latency: 'interactive',
 		contentHint: 'motion',
 	},
 	quality: {
 		frameRate: 60,
 		resolutionScale: 1,
-		bitrateMbps: 12,
-		latency: 'smooth',
+		bitrateMbps: 35,
+		latency: 'balanced',
 		contentHint: 'detail',
 	},
 };

@@ -78,7 +78,7 @@ app.whenReady().then(async () => {
     await clickHost('Save streaming settings');
     await waitFor(() => host.webContents.executeJavaScript("document.body.innerText.includes('Settings saved and applied')"), 'settings saved');
     const speed = await host.webContents.executeJavaScript("window.electron.ipcRenderer.invoke('get-stream-settings')");
-    assert.equal(speed.frameRate, 30); assert.equal(speed.resolutionScale, 0.5); assert.equal(speed.bitrateMbps, 3);
+    assert.equal(speed.frameRate, 30); assert.equal(speed.resolutionScale, 0.5); assert.equal(speed.bitrateMbps, 8);
     const persisted = JSON.parse(fs.readFileSync(path.join(dataDir, 'altronscreen-storage.json'), 'utf8'));
     assert.deepEqual(JSON.parse(persisted['stream-settings']), speed);
     await host.webContents.executeJavaScript("document.querySelector('#settings-overlay-inner #close-overlay-button').click()");
@@ -103,7 +103,7 @@ app.whenReady().then(async () => {
     })()`);
     await waitFor(async () => {
       const state = await senderState();
-      return state.capture.frameRate === 30 && state.parameters.encodings[0].maxBitrate === 3000000 && state;
+      return state.capture.frameRate === 30 && state.parameters.encodings[0].maxBitrate === 8000000 && state;
     }, 'saved defaults configure capture and encoder');
     assert.equal((await senderState()).parameters.encodings[0].maxFramerate, 30);
 

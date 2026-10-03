@@ -263,6 +263,16 @@ export default class AltronScreenApp {
 			'100',
 		);
 
+		// Capture and encoding run inside a hidden helper renderer (show:false).
+		// Chromium normally throttles hidden/occluded renderers, which starves the
+		// WebRTC encoder and shows up as choppy, low-framerate screen sharing.
+		// These switches keep the hidden helper schedulable so it can encode at
+		// the requested frame rate. They only stop backgrounding throttling; they
+		// do not change what or how we capture.
+		app.commandLine.appendSwitch('disable-renderer-backgrounding');
+		app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
+		app.commandLine.appendSwitch('disable-background-timer-throttling');
+
 		// AltronScreen streams directly to a browser on the same LAN. Chromium
 		// hides host IPs behind resolvable-only-on-the-host mDNS `.local`
 		// candidates, so the viewer (especially Safari/Firefox, which do not

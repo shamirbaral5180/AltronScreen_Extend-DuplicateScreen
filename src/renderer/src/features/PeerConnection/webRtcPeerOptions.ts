@@ -35,7 +35,7 @@ export async function applyLowLatencySenderParameters(
 					degradationPreference?: string;
 				};
 				if (!params.encodings || params.encodings.length === 0) {
-					// Not yet negotiated; the sdpTransform bitrate cap still applies.
+					// Not yet negotiated; re-applied on the peer 'connect' event.
 					continue;
 				}
 				params.encodings[0].maxBitrate = Math.round(
