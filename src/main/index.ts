@@ -258,6 +258,14 @@ export default class AltronScreenApp {
 			}
 		});
 
+		// Prefer high-performance GPUs (e.g. discrete NVIDIA/AMD over integrated)
+		// and never let a software-only GL fallback silently replace GPU capture
+		// or encoding. No artificial CPU/GPU resource limits are applied: the
+		// app is allowed to use as much as the hardware offers so sharing stays
+		// sharp and lag-free.
+		app.commandLine.appendSwitch('force_high_performance_gpu');
+		app.commandLine.appendSwitch('ignore-gpu-blocklist');
+
 		app.commandLine.appendSwitch(
 			'webrtc-max-cpu-consumption-percentage',
 			'100',

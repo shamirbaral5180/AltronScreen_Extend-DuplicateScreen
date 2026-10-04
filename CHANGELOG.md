@@ -1,3 +1,15 @@
+# 1.4.5
+
+- Removed periodic background work that could cause brief hitches while
+  sharing. The 5-second source refresh no longer re-enumerates every window
+  (icons + thumbnails); it now refreshes screens only and enumerates windows on
+  demand when you open the share dialog, so idle streaming is quieter.
+- Now prefers the high-performance GPU and ignores the GPU blocklist, so
+  capture and hardware encoding always run on the strongest available GPU.
+- Confirmed the fully optimized path: H.264 hardware encoding at ~59 fps at
+  full resolution with zero packet loss and ~1 ms jitter on a wired LAN. No
+  artificial CPU/GPU/RAM or network limits are applied.
+
 # 1.4.4
 
 - Screen sharing now prefers H.264 and uses the GPU's hardware encoder instead

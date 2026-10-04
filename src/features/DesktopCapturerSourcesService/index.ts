@@ -43,6 +43,8 @@ class DesktopCapturerSourcesService {
 
 	refreshPromise: Promise<void> | null;
 
+	refreshInFlightIsLight: boolean;
+
 	portalSelectionPromise: Promise<DesktopCapturerSource | null> | null;
 
 	constructor() {
@@ -59,6 +61,7 @@ class DesktopCapturerSourcesService {
 		>();
 		this.autoRefreshEnabled = !isLinuxWaylandSession;
 		this.refreshPromise = null;
+		this.refreshInFlightIsLight = false;
 		this.portalSelectionPromise = null;
 
 		if (this.autoRefreshEnabled) {
@@ -80,7 +83,11 @@ class DesktopCapturerSourcesService {
 			return;
 		}
 		setInterval(() => {
-			this.refreshDesktopCapturerSources();
+			// Background refresh stays lightweight (screens only). Full window
+			// enumeration duplicates every window surface, which briefly competes
+			// with the desktop compositor and is felt as a periodic hitch while
+			// sharing. Windows are enumerated on demand when the dialog opens.
+			this.refreshDesktopCapturerSources({ light: true });
 		}, 5000);
 	}
 
@@ -148,8 +155,8 @@ class DesktopCapturerSourcesService {
 		// TODO: implement logic
 	}
 
-	async updateDesktopCapturerSources(): Promise<void> {
-		const captured = await this.getSourcesWithFallback();
+	async updateDesktopCapturerSources(light = false): Promise<void> {
+		const captured = await this.getSourcesWithFallback(light);
 		const enumerated = new Map<string, DesktopCapturerSourceWithType>();
 		captured.forEach((source) => {
 			enumerated.set(source.id, {
@@ -165,8 +172,20 @@ class DesktopCapturerSourcesService {
 			(entry) => entry.type === DesktopCapturerSourceType.SCREEN,
 		).length;
 		this.log.debug(
-			`Captured sources: ${enumerated.size} (windows=${windowCount}, screens=${screenCount})`,
+			`Captured sources: ${enumerated.size} (windows=${windowCount}, screens=${screenCount}, light=${light})`,
 		);
+
+		// Light refresh does not enumerate windows, so carry forward the window
+		// entries from the last full enumeration instead of dropping them.
+		if (light) {
+			[...this.sources.values()]
+				.filter((entry) => entry.type === DesktopCapturerSourceType.WINDOW)
+				.forEach((entry) => {
+					if (!enumerated.has(entry.source.id)) {
+						enumerated.set(entry.source.id, entry);
+					}
+				});
+		}
 
 		// Windows can transiently return an empty/partial window list (notably
 		// right after startup or while the desktop is busy). Blanking the list
@@ -204,16 +223,30 @@ class DesktopCapturerSourcesService {
 	}
 
 	/**
-	 * Enumerate capture sources with defensive fallbacks.
+	 * Enumerate capture sources, optionally in a lightweight mode.
 	 *
-	 * On Windows, `desktopCapturer.getSources` can transiently return an empty
-	 * list (or reject when `fetchWindowIcons` cannot extract an icon from a
-	 * protected/UWP window), which would leave the share dialog with nothing to
-	 * pick. We therefore retry the same request a few times before dropping the
-	 * icon flag, and finally fall back to screens-only so the user can always
-	 * share something.
+	 * Window enumeration with icons and thumbnails is expensive: Chromium
+	 * duplicates every window surface. The periodic background refresh only
+	 * needs screens, so `light` limits it to screens and keeps windows from the
+	 * previous full enumeration. The share dialog and window-capture requests
+	 * use the full enumeration (on demand, when the user is actually choosing),
+	 * which also picks up newly opened windows.
 	 */
-	private async getSourcesWithFallback(): Promise<DesktopCapturerSource[]> {
+	private async getSourcesWithFallback(
+		light = false,
+	): Promise<DesktopCapturerSource[]> {
+		const screensOnly: Parameters<typeof desktopCapturer.getSources>[0] = {
+			types: [DesktopCapturerSourceType.SCREEN],
+			thumbnailSize: { width: 500, height: 500 },
+			fetchWindowIcons: false,
+		};
+
+		// Lightweight background refresh: screens only. The heavy window
+		// enumeration (icons + per-window thumbnails) happens on demand.
+		if (light) {
+			return (await this.tryGetSources(screensOnly)) ?? [];
+		}
+
 		const withWindows: Parameters<typeof desktopCapturer.getSources>[0] = {
 			types: [
 				DesktopCapturerSourceType.WINDOW,
@@ -227,11 +260,6 @@ class DesktopCapturerSourcesService {
 				...withWindows,
 				fetchWindowIcons: false,
 			};
-		const screensOnly: Parameters<typeof desktopCapturer.getSources>[0] = {
-			types: [DesktopCapturerSourceType.SCREEN],
-			thumbnailSize: { width: 500, height: 500 },
-			fetchWindowIcons: false,
-		};
 
 		// Retry the primary request a few times: a transient empty result is the
 		// common failure mode, and a short retry usually resolves it.
@@ -267,15 +295,27 @@ class DesktopCapturerSourcesService {
 		}
 	}
 
-	async refreshDesktopCapturerSources(): Promise<void> {
+	async refreshDesktopCapturerSources(options?: {
+		light?: boolean;
+	}): Promise<void> {
 		// TODO: implement get available sources logic here;
+		const light = options?.light ?? false;
 		if (this.refreshPromise) {
-			return this.refreshPromise;
+			// Reuse an in-flight refresh when it is at least as complete as what
+			// we need: a full (non-light) refresh supersedes any request, and a
+			// light request can reuse a light one. A full request must not reuse
+			// a light one, or the dialog would miss newly opened windows.
+			if (!this.refreshInFlightIsLight || light) {
+				return this.refreshPromise;
+			}
+			// Wait for the in-flight light refresh, then run a full one.
+			await this.refreshPromise;
 		}
 
+		this.refreshInFlightIsLight = light;
 		this.refreshPromise = (async () => {
 			try {
-				await this.updateDesktopCapturerSources();
+				await this.updateDesktopCapturerSources(light);
 				// eventually run checkers that emit events
 				this.checkForClosedWindows();
 				this.checkForScreensDisconnected();
@@ -283,6 +323,7 @@ class DesktopCapturerSourcesService {
 				this.log.error(e);
 			} finally {
 				this.refreshPromise = null;
+				this.refreshInFlightIsLight = false;
 			}
 		})();
 
